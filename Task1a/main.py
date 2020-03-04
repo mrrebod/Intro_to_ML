@@ -2,7 +2,7 @@
 """
 Introduction to Machine Learning: Task1a
 
-Vukasin Lalic  & Marco Dober aka Teamsnorlax
+Vukasin Lalic  & Marco Dober aka Snorlax
 """
 
 import numpy as np    
