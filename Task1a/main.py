@@ -17,18 +17,18 @@ y = data_set[:, 1]
 # Extract feature from train set
 X = data_set[:, 2:]
 
-# lambda
+# lambda vector given by task description
 lamb = np.array([0.01, 0.1, 1, 10, 100])
 
 # Split data set into train and test set
 kf = KFold(n_splits=10)
-# kf = KFold(n_splits=10, shuffle=True, random_state=1)
+# kf = KFold(n_splits=10, shuffle=True, random_state=1) # Shuffle before splitting
 
 # Allocate RMSE vector
 rmse_avg = np.zeros(np.shape(lamb))
 
 for i in range(len(lamb)):
-    clf = Ridge(lamb[i])
+    clf = Ridge(lamb[i], fit_intercept = False)
     for train_index, test_index in kf.split(X):
         X_train, X_test = X[train_index], X[test_index]
         y_train, y_test = y[train_index], y[test_index]
@@ -39,5 +39,6 @@ for i in range(len(lamb)):
         rmse_batch = np.sqrt(np.mean((y_test-y_predict)**2))
         
         rmse_avg[i] = rmse_avg[i] + (rmse_batch)/10
-        
+
+# Save Data to csv file      
 np.savetxt('submission.csv',rmse_avg)
