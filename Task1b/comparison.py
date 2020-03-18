@@ -36,7 +36,10 @@ Phi_train_stand[:, 20]    = np.ones(np.shape(X_stand)[0]) # Phi 21
 
 # Alpha for cross validation
 #alpha_cv = np.linspace(start=1e-3, stop=100, num=100)
-alpha_cv = np.logspace(start=-2, stop=2, num=100)
+alpha_cv = np.logspace(start = -2, stop = 2, num = 100)
+
+# Regularization Parameter for Support Vector Machine
+C_cv = np.linspace(start = 1.0, stop = 50, num = 100)
 
 # Split data set into train and test set
 kf = KFold(n_splits=10)
@@ -63,7 +66,9 @@ for i in range(len(alpha_cv)):              # For each alpha
                       tol=0.000001,
                       fit_intercept = False)
     
-    clf_lisvr = LinearSVR(
+    clf_lisvr = LinearSVR(C=C_cv[i],
+                          max_iter=100000,
+                          random_state=0,
                           fit_intercept = False)
     
     for train_index, test_index in kf.split(Phi_train_stand):
@@ -121,7 +126,9 @@ clf_lasso = Lasso(alpha=alpha_cv[np.argmin(rmse_avg,axis=0)[3]],
                   tol=0.000001,
                   fit_intercept = False)
 
-clf_lisvr = LinearSVR(
+clf_lisvr = LinearSVR(C=C_cv[np.argmin(rmse_avg,axis=0)[4]],
+                      max_iter=100000,
+                      random_state=0,
                       fit_intercept = False)
 
 
