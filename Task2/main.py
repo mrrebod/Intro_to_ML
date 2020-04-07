@@ -10,6 +10,8 @@ from sklearn.metrics import roc_auc_score  # The used score (not needed?)
 from sklearn.svm import LinearSVC          # Let's start with the linear one
 from sklearn.svm import SVC                # Try out later
 from sklearn.impute import SimpleImputer   # Maybe use this for incomplete data
+from sklearn.multiclass import OneVsRestClassifier
+
 
 # -----------------------------------------------------------------------------
 
@@ -44,6 +46,8 @@ train_pid = train_labels[:,0]
 # missing entries?
 # Maybe Using the impute class
 
+# initialize vectorized patients_data
+patients_data_vector = np.zeros((patients_data.shape[2], patients_data.shape[0]*patients_data.shape[1]))
 
 for i in range(patients_data.shape[2]):
     patients_data_try = patients_data[:,:,i]
@@ -51,7 +55,7 @@ for i in range(patients_data.shape[2]):
     # If 6 or more entries of a column are not nan and at least one is missing 
     # -> fill the rest with the median
     number_of_not_nans = np.count_nonzero(~np.isnan(patients_data_try), axis=0) 
-    columns_to_fill = np.greater_equal(number_of_not_nans, 6) & np.less(number_of_not_nans, 12)
+    columns_to_fill = np.greater_equal(number_of_not_nans, 1) & np.less(number_of_not_nans, 12)
     
     # Compute the median where needed
     where_to_fill  = patients_data_try[:,np.where(columns_to_fill)]
@@ -71,20 +75,27 @@ for i in range(patients_data.shape[2]):
     # Rewerite the starting array
     patients_data_try[:,np.squeeze(np.where(columns_to_fill))] = where_to_fill
     
-    patients_data[:,:,i] = patients_data_try
-
+   #  patients_data[:,:,i] = patients_data_try
+    
+    # vectorize patients_data
+    patients_data_vector[i,:] = np.ndarray.flatten(patients_data_try)
+    
+    
+# Replace nan values with 0
+patients_data_vector = np.nan_to_num(patients_data_vector, nan=0)
     
 
 # What to do with all nan columns or columns where nan is in more than 6 entries?
 # -> delete?
 
-
-
-
 # -----------------------------------------------------------------------------
 
 # Train the model 
-# clf = LinearSVC(random_state=0, tol=1e-5)
+# clf = LinearSVC(random_state=0, tol=1e-5, class_weight= 'balanced')
+clf = OneVsRestClassifier(SVC(kernel='linear', probability=True, class_weight='balanced'))
+
+clf.fit(patients_data_vector, train_labels[:, 1:11])
+
 
 # for i in range(patients_data.shape[2]):
 #     clf.fit(patients_data[:,:,i], train_labels[i,1:])
