@@ -127,26 +127,9 @@ for i in range(test_data.shape[2]):
 # Replace nan values with 0
 patients_data_vector = np.nan_to_num(patients_data_vector, nan=0)
 test_data_vector = np.nan_to_num(test_data_vector, nan=0)
-    
 
-# What to do with all nan columns or columns where nan is in more than 6 entries?
-# -> delete?
-
-# -----------------------------------------------------------------------------
-
-# Train the model 
-# clf = LinearSVC(random_state=0, tol=1e-5, class_weight= 'balanced')
-# clf = OneVsRestClassifier(SVC(kernel='linear', probability=True, class_weight='balanced'),n_jobs=-1)
-clf = OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=-1)
-
-# clf.fit(patients_data_vector[0:500,:], train_labels[0:500, 1:11])
-clf.fit(patients_data_vector[0:50,:], train_labels[0:50, 1:11])
-
-predict_labels = clf.predict(test_data_vector)
-predict_distance = clf.decision_function(test_data_vector)
-predict_confidence = sigmoid(predict_distance)
-
-    
+# TODO: Replace nan with mean of TRAIN set
+# TODO: Make 1 vector out of the 12 measurements (loose time info...)
 
 # -----------------------------------------------------------------------------
 
@@ -157,11 +140,23 @@ predict_confidence = sigmoid(predict_distance)
 # LABEL_Bilirubin_total, LABEL_Lactate, LABEL_TroponinI, LABEL_SaO2, 
 # LABEL_Bilirubin_direct, LABEL_EtCO2
 
+# TODO: Look at hyperparameters of classifier
+
+clf = OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=-1)
+
+# clf.fit(patients_data_vector[0:500,:], train_labels[0:500, 1:11])
+clf.fit(patients_data_vector[0:50,:], train_labels[0:50, 1:11])
+
+predict_labels = clf.predict(test_data_vector)
+predict_distance = clf.decision_function(test_data_vector)
+predict_confidence = sigmoid(predict_distance)
 # -----------------------------------------------------------------------------
 
 # Subtask 2
 # Predict whether sepsis will occur in the remaining stay in the interval [0,1]
 # LABEL_Sepsis
+
+# TODO: Look at hyperparameters of classifier
 
 clf_2 = SVC(class_weight='balanced')
 clf_2.fit(patients_data_vector[0:50,:], train_labels[0:50, 11])
@@ -175,6 +170,8 @@ predict_confidence_sepsis = sigmoid(predict_distance_sepsis)
 # Subtask 3
 # Predict future mean values of key vital signs
 # LABEL_RRate, LABEL_ABPm, LABEL_SpO2, LABEL_Heartrate
+
+# TODO: Make CrossVal of hyperparameters (Task 1b...)
 
 reg = Ridge(alpha=1.0)
 reg.fit(patients_data_vector[0:50,:], train_labels[0:50, 12:])
