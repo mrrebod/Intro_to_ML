@@ -11,6 +11,7 @@ from sklearn.svm import LinearSVC          # Let's start with the linear one
 from sklearn.svm import SVC                # Try out later
 from sklearn.impute import SimpleImputer   # Maybe use this for incomplete data
 from sklearn.multiclass import OneVsRestClassifier
+from sklearn.linear_model import Ridge
 
 # -----------------------------------------------------------------------------
 
@@ -162,13 +163,41 @@ predict_confidence = sigmoid(predict_distance)
 # Predict whether sepsis will occur in the remaining stay in the interval [0,1]
 # LABEL_Sepsis
 
+clf_2 = SVC(class_weight='balanced')
+clf_2.fit(patients_data_vector[0:50,:], train_labels[0:50, 11])
+
+predict_labels_sepsis = clf_2.predict(test_data_vector)
+predict_distance_sepsis = clf_2.decision_function(test_data_vector)
+predict_confidence_sepsis = sigmoid(predict_distance_sepsis)
+
 # -----------------------------------------------------------------------------
 
 # Subtask 3
 # Predict future mean values of key vital signs
 # LABEL_RRate, LABEL_ABPm, LABEL_SpO2, LABEL_Heartrate
 
+reg = Ridge(alpha=1.0)
+reg.fit(patients_data_vector[0:50,:], train_labels[0:50, 12:])
 
+predict_reg = reg.predict(test_data_vector)
+
+
+# -----------------------------------------------------------------------------
+# Write the Solution to a csv file
+
+test_pid_array = np.reshape(test_pid, (test_pid.shape[0],1))
+predict_confidence_sepsis_array = np.reshape(predict_confidence_sepsis, (predict_confidence_sepsis.shape[0],1))
+
+solution = np.concatenate((predict_confidence, predict_confidence_sepsis_array), axis=1)
+solution = np.concatenate((solution, predict_reg), axis=1)
+solution = np.concatenate((test_pid_array, solution), axis=1)
+
+solution_df = pd.DataFrame(data   = solution,
+                           index  = np.arange(0,solution.shape[0]),
+                           columns = train_labels_df.columns)
+
+
+solution_df.to_csv('prediction.zip', index=False, float_format='%.3f', compression='zip')
 
 
 
