@@ -12,6 +12,7 @@ from sklearn.svm import SVC                # Try out later
 from sklearn.impute import SimpleImputer   # Maybe use this for incomplete data
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.linear_model import Ridge
+import time
 
 # -----------------------------------------------------------------------------
 
@@ -31,13 +32,22 @@ train_features = train_features_df.to_numpy()
 train_labels   = train_labels_df.to_numpy()
 
 # -----------------------------------------------------------------------------
+# Calculate the global mean of each column (except pid)
+global_mean = np.nanmean(train_features[:,1:], axis=0)
+
+print("Data Setup starts")
+tic = time.time()
+      
+# -----------------------------------------------------------------------------
 
 # Create a 3D array where the third dimension is the patient and the first two
 # dimesions are all its values and measurements over time (with pid removed)
 patients_data = np.zeros((12, train_features.shape[1]-1, int(train_features.shape[0]/12) ))
+patients_orig = np.zeros((12, train_features.shape[1]-1, int(train_features.shape[0]/12) ))
 test_data     = np.zeros((12, test_features.shape[1]-1, int(test_features.shape[0]/12) ))
 for i in range(len(train_labels)):
     patients_data[:,:,i] = train_features[i*12 : 12*(i+1) :1, 1:]
+    patients_orig[:,:,i] = train_features[i*12 : 12*(i+1) :1, 1:]
 for i in range(int(len(test_features)/12)):
     test_data[:,:,i]     = test_features[i*12 : 12*(i+1) :1, 1:]
 
@@ -67,26 +77,30 @@ for i in range(patients_data.shape[2]):
     number_of_not_nans = np.count_nonzero(~np.isnan(patients_data_try), axis=0) 
     columns_to_fill = np.greater_equal(number_of_not_nans, 1) & np.less(number_of_not_nans, 12)
     
+    # Which columns consist of only nan entries
+    columns_with_only_nan = np.equal(number_of_not_nans, 0)
+    
     # Compute the median where needed
     where_to_fill  = patients_data_try[:,np.where(columns_to_fill)]
     where_to_fill  = np.squeeze(where_to_fill)   # from 3d to 2d
     median_to_fill = np.nanmedian(where_to_fill,axis=0)
     
-    #Find indicies that you need to replace
+    # Replace the columns with only nan entries by the global means
+    patients_data_try[:,np.where(columns_with_only_nan)] = global_mean[np.where(columns_with_only_nan)]
+    
+    # Find indicies that you need to replace
     inds = np.where(np.isnan(where_to_fill))
     
-    #Place column means in the indices. Align the arrays using take
+    # Place column means in the indices. Align the arrays using take
     if np.isscalar(median_to_fill):
         where_to_fill[inds] = median_to_fill
     else:
         where_to_fill[inds] = np.take(median_to_fill, inds[1])
-    
+        
     
     # Rewerite the starting array
     patients_data_try[:,np.squeeze(np.where(columns_to_fill))] = where_to_fill
-    
-   #  patients_data[:,:,i] = patients_data_try
-    
+
     # vectorize patients_data
     patients_data_vector[i,:] = np.ndarray.flatten(patients_data_try)
     
@@ -100,36 +114,41 @@ for i in range(test_data.shape[2]):
     number_of_not_nans = np.count_nonzero(~np.isnan(test_data_try), axis=0) 
     columns_to_fill = np.greater_equal(number_of_not_nans, 1) & np.less(number_of_not_nans, 12)
     
+    # Which columns consist of only nan entries
+    columns_with_only_nan = np.equal(number_of_not_nans, 0)
+    
     # Compute the median where needed
     where_to_fill  = test_data_try[:,np.where(columns_to_fill)]
     where_to_fill  = np.squeeze(where_to_fill)   # from 3d to 2d
     median_to_fill = np.nanmedian(where_to_fill,axis=0)
     
-    #Find indicies that you need to replace
+    # Replace the columns with only nan entries by the global means
+    test_data_try[:,np.where(columns_with_only_nan)] = global_mean[np.where(columns_with_only_nan)]
+  
+    # Find indicies that you need to replace
     inds = np.where(np.isnan(where_to_fill))
     
-    #Place column means in the indices. Align the arrays using take
+    # Place column means in the indices. Align the arrays using take
     if np.isscalar(median_to_fill):
         where_to_fill[inds] = median_to_fill
     else:
         where_to_fill[inds] = np.take(median_to_fill, inds[1])
-    
-    
+        
     # Rewerite the starting array
     test_data_try[:,np.squeeze(np.where(columns_to_fill))] = where_to_fill
-    
-   #  test_data[:,:,i] = test_data_try
     
     # vectorize patients_data
     test_data_vector[i,:] = np.ndarray.flatten(test_data_try)
     
     
 # Replace nan values with 0
-patients_data_vector = np.nan_to_num(patients_data_vector, nan=0)
-test_data_vector = np.nan_to_num(test_data_vector, nan=0)
+# patients_data_vector = np.nan_to_num(patients_data_vector, nan=0)
+# test_data_vector = np.nan_to_num(test_data_vector, nan=0)
 
 # TODO: Replace nan with mean of TRAIN set
 # TODO: Make 1 vector out of the 12 measurements (loose time info...)
+toc = time.time()
+print("Data Setup done | Duration = ", toc-tic, "seconds")
 
 # -----------------------------------------------------------------------------
 
@@ -141,15 +160,24 @@ test_data_vector = np.nan_to_num(test_data_vector, nan=0)
 # LABEL_Bilirubin_direct, LABEL_EtCO2
 
 # TODO: Look at hyperparameters of classifier
+print("clf  start train and predict")
+tic = time.time()
 
 clf = OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=-1)
 
 # clf.fit(patients_data_vector[0:500,:], train_labels[0:500, 1:11])
-clf.fit(patients_data_vector[0:50,:], train_labels[0:50, 1:11])
+clf.fit(patients_data_vector[:,:], train_labels[:, 1:11])
+
+toc = time.time()
+print("clf  training done | Duration = ", toc-tic, "seconds")
+tic = time.time()
 
 predict_labels = clf.predict(test_data_vector)
 predict_distance = clf.decision_function(test_data_vector)
 predict_confidence = sigmoid(predict_distance)
+
+toc = time.time()
+print("clf  predicting done | Duration = ", toc-tic, "seconds")
 # -----------------------------------------------------------------------------
 
 # Subtask 2
@@ -157,13 +185,22 @@ predict_confidence = sigmoid(predict_distance)
 # LABEL_Sepsis
 
 # TODO: Look at hyperparameters of classifier
+print("clf2 start train and predict")
+tic = time.time()
 
 clf_2 = SVC(class_weight='balanced')
-clf_2.fit(patients_data_vector[0:50,:], train_labels[0:50, 11])
+clf_2.fit(patients_data_vector[:,:], train_labels[:, 11])
+
+toc = time.time()
+print("clf2 training done | Duration = ", toc-tic, "seconds")
+tic = time.time()
 
 predict_labels_sepsis = clf_2.predict(test_data_vector)
 predict_distance_sepsis = clf_2.decision_function(test_data_vector)
 predict_confidence_sepsis = sigmoid(predict_distance_sepsis)
+
+toc = time.time()
+print("clf2 predicting done | Duration = ", toc-tic, "seconds")
 
 # -----------------------------------------------------------------------------
 
@@ -172,11 +209,20 @@ predict_confidence_sepsis = sigmoid(predict_distance_sepsis)
 # LABEL_RRate, LABEL_ABPm, LABEL_SpO2, LABEL_Heartrate
 
 # TODO: Make CrossVal of hyperparameters (Task 1b...)
+print("reg  start train and predict")
+tic = time.time()
 
 reg = Ridge(alpha=1.0)
-reg.fit(patients_data_vector[0:50,:], train_labels[0:50, 12:])
+reg.fit(patients_data_vector[:,:], train_labels[:, 12:])
+
+toc = time.time()
+print("reg  training done | Duration = ", toc-tic, "seconds")
+tic = time.time()
 
 predict_reg = reg.predict(test_data_vector)
+
+toc = time.time()
+print("reg  predicting done | Duration = ", toc-tic, "seconds")
 
 
 # -----------------------------------------------------------------------------
