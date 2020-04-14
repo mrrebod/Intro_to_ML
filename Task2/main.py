@@ -13,6 +13,7 @@ from sklearn.impute import SimpleImputer   # Maybe use this for incomplete data
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.linear_model import Ridge
 import time
+from sklearn.linear_model import LinearRegression
 
 # -----------------------------------------------------------------------------
 
@@ -63,18 +64,26 @@ test_pid  = test_features[0::12,0]
 patients_data_vector = np.zeros((patients_data.shape[2], patients_data.shape[0]*patients_data.shape[1]))
 test_data_vector     = np.zeros((test_data.shape[2], test_data.shape[0]*test_data.shape[1]))
 
+patients_data_vector_v2 = np.zeros((patients_data.shape[2], 124))
+
 # vector which counts all nan columns
 number_all_nan_columns = np.zeros(patients_data.shape[1])
 # vector which counts all measurments done exacly once
 number_one_meas_columns = np.zeros(patients_data.shape[1]) 
 
+regr = LinearRegression()
+
+
 for i in range(patients_data.shape[2]):
     patients_data_try = patients_data[:,:,i]
     
-    # If 6 or more entries of a column are not nan and at least one is missing 
+    # Time as x-axis
+    x_axis = patients_data_try[:,0] 
+    
     # -> fill the rest with the median
     number_of_not_nans = np.count_nonzero(~np.isnan(patients_data_try), axis=0) 
-    columns_to_fill = np.greater_equal(number_of_not_nans, 1) & np.less(number_of_not_nans, 12)
+    columns_to_fill = np.equal(number_of_not_nans, 1)
+    columns_to_predict = np.greater_equal(number_of_not_nans, 2) & np.less(number_of_not_nans, 12)
     
     # Which columns consist of only nan entries
     columns_with_only_nan = np.equal(number_of_not_nans, 0)
@@ -89,6 +98,19 @@ for i in range(patients_data.shape[2]):
     # Replace the columns with only nan entries by the global means
     patients_data_try[:,np.where(columns_with_only_nan)] = global_mean[np.where(columns_with_only_nan)]
     
+    
+    # Not median anymore but the regression prediction
+    if np.any(columns_to_predict):
+        for index in np.nditer(np.where(columns_to_predict)):
+            # Split into nan and not nan parts
+            # non nan -> train
+            # nan     -> predict
+            nan_index     = np.argwhere(np.isnan(patients_data_try[:, index]))
+            non_nan_index = np.argwhere(~np.isnan(patients_data_try[:, index]))
+            
+            regr.fit(x_axis[non_nan_index].reshape(-1,1), patients_data_try[non_nan_index, index])
+            patients_data_try[nan_index, index] = regr.predict(x_axis[nan_index].reshape(-1, 1))
+    
     # Find indicies that you need to replace
     inds = np.where(np.isnan(where_to_fill))
     
@@ -101,9 +123,31 @@ for i in range(patients_data.shape[2]):
     
     # Rewerite the starting array
     patients_data_try[:,np.squeeze(np.where(columns_to_fill))] = where_to_fill
-
+    
+    # Calculate the means of the patients_data_try
+    patients_data_try_mean = np.mean(patients_data_try, axis=0)
+    
     # vectorize patients_data
     patients_data_vector[i,:] = np.ndarray.flatten(patients_data_try)
+    
+    # create second version of feature vector
+    patients_data_vector_v2[i, 0:12] = patients_data_try[:,0] # time
+    patients_data_vector_v2[i, 12:17]   = patients_data_try_mean[1:6] # Age, EtCO2, PTT, BUN, Lactate
+    patients_data_vector_v2[i, 17:29]   = patients_data_try[:,6] # Temp
+    patients_data_vector_v2[i, 29:32]   = patients_data_try_mean[7:10] # Hgb, HCO3, BaseExcess
+    patients_data_vector_v2[i, 32:44]   = patients_data_try[:,10] # RRate
+    patients_data_vector_v2[i, 44:54]   = patients_data_try_mean[11:21] # Fibrinogen - Glucose
+    patients_data_vector_v2[i, 54:66]   = patients_data_try[:,21] # ABPm
+    patients_data_vector_v2[i, 66:68]   = patients_data_try_mean[22:24] # Magnesium, Potassium
+    patients_data_vector_v2[i, 68:80]   = patients_data_try[:,24] # ABPd
+    patients_data_vector_v2[i, 80:82]   = patients_data_try_mean[25:27] # Calcium, Alkalinephos
+    patients_data_vector_v2[i, 82:94]   = patients_data_try[:,27] # SpO2
+    patients_data_vector_v2[i, 94:97]   = patients_data_try_mean[28:31] # Bilirubin_direct, Chloride, Hct
+    patients_data_vector_v2[i, 97:109]   = patients_data_try[:,31] # Heartrate
+    patients_data_vector_v2[i, 109:111]   = patients_data_try_mean[32:34] # Bilirubin_total, Troponin1
+    patients_data_vector_v2[i, 111:123]   = patients_data_try[:,34] # ABPs
+    patients_data_vector_v2[i, 123]   = patients_data_try_mean[35] # pH
+    
     
     # Extract statistics of measurement occurancy 
     # increment number_of_all_nan_columns at the column where only nan values are
