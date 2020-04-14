@@ -58,16 +58,15 @@ test_pid  = test_features[0::12,0]
 
 
 # -----------------------------------------------------------------------------
-# How to handle missing data?  
-
-# Columns with more than half entries missing (6/12) will be dismissed?
-# Columns with less than half entries missing will use median values to fill the
-# missing entries?
-# Maybe Using the impute class
 
 # initialize vectorized patients_data
 patients_data_vector = np.zeros((patients_data.shape[2], patients_data.shape[0]*patients_data.shape[1]))
 test_data_vector     = np.zeros((test_data.shape[2], test_data.shape[0]*test_data.shape[1]))
+
+# vector which counts all nan columns
+number_all_nan_columns = np.zeros(patients_data.shape[1])
+# vector which counts all measurments done exacly once
+number_one_meas_columns = np.zeros(patients_data.shape[1]) 
 
 for i in range(patients_data.shape[2]):
     patients_data_try = patients_data[:,:,i]
@@ -79,6 +78,8 @@ for i in range(patients_data.shape[2]):
     
     # Which columns consist of only nan entries
     columns_with_only_nan = np.equal(number_of_not_nans, 0)
+    # Which columns consist of only one measurement
+    columns_with_one_meas = np.equal(number_of_not_nans, 1)
     
     # Compute the median where needed
     where_to_fill  = patients_data_try[:,np.where(columns_to_fill)]
@@ -104,6 +105,24 @@ for i in range(patients_data.shape[2]):
     # vectorize patients_data
     patients_data_vector[i,:] = np.ndarray.flatten(patients_data_try)
     
+    # Extract statistics of measurement occurancy 
+    # increment number_of_all_nan_columns at the column where only nan values are
+    np.add.at(number_all_nan_columns, np.where(columns_with_only_nan), 1)
+    # increment number_one_meas_columns at the column where only one meas is
+    np.add.at(number_one_meas_columns, np.where(columns_with_one_meas), 1)
+   
+    
+# calculate percentage of all nan columns
+percent_all_nan_columns = number_all_nan_columns/patients_data.shape[2]*100
+# create panda frame for percent_all_nan_columns
+percent_all_nan_columns_df = pd.DataFrame(data    = percent_all_nan_columns.reshape(1,36), 
+                                          columns = train_features_df.columns[1:])
+
+# calculate percentage of one meas only
+percent_one_meas_columns = number_one_meas_columns/patients_data.shape[2]*100
+# create panda frame for number_one_meas_columns
+percent_one_meas_columns_df = pd.DataFrame(data    = percent_one_meas_columns.reshape(1,36), 
+                                          columns = train_features_df.columns[1:])
     
 # Same for test data ----------------------------------------------------------
 for i in range(test_data.shape[2]):
@@ -150,6 +169,7 @@ for i in range(test_data.shape[2]):
 toc = time.time()
 print("Data Setup done | Duration = ", toc-tic, "seconds")
 
+"""
 # -----------------------------------------------------------------------------
 
 # Subtask 1
@@ -242,5 +262,5 @@ solution_df = pd.DataFrame(data   = solution,
 
 solution_df.to_csv('prediction.zip', index=False, float_format='%.3f', compression='zip')
 
-
+"""
 
