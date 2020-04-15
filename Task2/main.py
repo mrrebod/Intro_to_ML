@@ -60,8 +60,8 @@ colums_to_keep   = np.where(mask4) # keep only cols with less than 10% missing
 # test_features  = np.delete(test_features,colums_to_delete, 1)
 
 # Only keep the frequent ones
-train_features = np.squeeze(train_features[:,colums_to_keep])
-test_features  = np.squeeze(test_features[:,colums_to_keep]) 
+# train_features = np.squeeze(train_features[:,colums_to_keep])
+# test_features  = np.squeeze(test_features[:,colums_to_keep]) 
 
 # -----------------------------------------------------------------------------
 # Calculate the global mean of each column (except pid)
@@ -101,7 +101,9 @@ test_pid  = test_features[0::12,0]
 # initialize vectorized patients_data
 patients_data_vector = np.zeros((patients_data.shape[2], patients_data.shape[0]*patients_data.shape[1]))
 test_data_vector     = np.zeros((test_data.shape[2], test_data.shape[0]*test_data.shape[1]))
-regr = LinearRegression()
+regr      = LinearRegression()
+regr_avgd = np.zeros((2, patients_data.shape[1])) # average the fit for each feature
+regr_list = [None] * patients_data.shape[1]
 
 for i in range(patients_data.shape[2]):
     patients_data_try = patients_data[:,:,i]
@@ -131,11 +133,16 @@ for i in range(patients_data.shape[2]):
             # Split into nan and not nan parts
             # non nan -> train
             # nan     -> predict
-            nan_index     = np.argwhere(np.isnan(patients_data_try[:, index]))
+            nan_index     = np.argwhere( np.isnan(patients_data_try[:, index]))
             non_nan_index = np.argwhere(~np.isnan(patients_data_try[:, index]))
             
             regr.fit(x_axis[non_nan_index].reshape(-1,1), patients_data_try[non_nan_index, index])
             patients_data_try[nan_index, index] = regr.predict(x_axis[nan_index].reshape(-1, 1))
+            
+            # regr_list[index] = 
+            
+            # regr_avgd[0, n] = regr.coef_
+            # regr_avgd[1, n] = regr.intercept_
             
     # Find indicies that you need to replace
     inds = np.where(np.isnan(where_to_fill))
@@ -183,13 +190,13 @@ for i in range(test_data.shape[2]):
             # Split into nan and not nan parts
             # non nan -> train
             # nan     -> predict
-            nan_index     = np.argwhere(np.isnan(test_data_try[:, index]))
+            nan_index     = np.argwhere( np.isnan(test_data_try[:, index]))
             non_nan_index = np.argwhere(~np.isnan(test_data_try[:, index]))
             
             # regr.fit(x_axis[non_nan_index].reshape(-1,1), test_data_try[non_nan_index, index])
             regr.fit(x_axis[non_nan_index].reshape(-1,1), patients_data_try[non_nan_index, index, i]) # fit on patients data
             test_data_try[nan_index, index] = regr.predict(x_axis[nan_index].reshape(-1, 1))
-           
+            
             
     # Find indicies that you need to replace
     inds = np.where(np.isnan(where_to_fill))

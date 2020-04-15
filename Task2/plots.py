@@ -110,26 +110,38 @@ plt.legend(handles=legend_elements)
 
 # 2, 6, 21, 24, 34, 
 # p_d_test = patients_data[:,2,3]
-n = 2
-p_d_test = patients_data[:,n,3]
-x_axis = patients_data[:,0,3] # Time as x-axis
-
-nan_index     = np.argwhere(np.isnan(patients_data[:, n,3]))
-non_nan_index = np.argwhere(~np.isnan(patients_data[:, n,3]))
-
-p_d_test_no_nan = patients_data[1:,n,3]
-x_axis_no_nan = patients_data[1:,0,3]
 
 regr = LinearRegression()
-regr.fit(x_axis_no_nan.reshape(-1, 1),p_d_test_no_nan)
+regr_list = np.zeros((2, patients_data.shape[1])) # average the fit for each feature
+pid = 3
+
+n = 2
+p_d_test = patients_data[:, n, pid]
+x_axis   = patients_data[:, 0, pid] # Time as x-axis
+
+nan_index     = np.argwhere( np.isnan(patients_data[:, n, pid]))
+non_nan_index = np.argwhere(~np.isnan(patients_data[:, n, pid]))
+
+p_d_test_no_nan = patients_data[1:, n, pid]
+x_axis_no_nan   = patients_data[1:, 0, pid]
+
+
+regr.fit(x_axis_no_nan.reshape(-1, 1), p_d_test_no_nan)
+
+regr_list[0, n] = regr.coef_
+regr_list[1, n] = regr.intercept_
+
+print("Coeffs:    ", regr.coef_)
+print("Intercept: ", regr.intercept_)
 
 x_axis_nan = np.array([1])
 p_d_test_nan = regr.predict(x_axis_nan.reshape(-1, 1))
 
 plt.figure()
-plt.plot(x_axis_no_nan,p_d_test_no_nan,'bo')
-plt.plot(x_axis_nan,p_d_test_nan,'ro')
-# plt.plot(x_axis,x_axis*regr.coef_)
+plt.plot(x_axis_no_nan, p_d_test_no_nan, 'bo')
+plt.plot(x_axis_nan, p_d_test_nan, 'ro')
+plt.plot(x_axis_nan, x_axis_nan*regr.coef_ + regr.intercept_, 'gx')
+plt.plot(x_axis, x_axis*regr.coef_ + regr.intercept_)
 
 
 
