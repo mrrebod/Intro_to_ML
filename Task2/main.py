@@ -3,17 +3,24 @@ Introduction to Machine Learning: Task2
 
 Marco Dober & Vukasin Lalic aka Snorlax
 """
-
+# General
 import pandas as pd
 import numpy as np
+import time
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import StandardScaler
+# Classifier
 from sklearn.metrics import roc_auc_score  # The used score (not needed?)
 from sklearn.svm import LinearSVC          # Let's start with the linear one
 from sklearn.svm import SVC                # Try out later
 from sklearn.impute import SimpleImputer   # Maybe use this for incomplete data
 from sklearn.multiclass import OneVsRestClassifier
+# Regressors 
 from sklearn.linear_model import Ridge
-import time
 from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import SGDRegressor
+from sklearn.linear_model import Lasso
+from sklearn.svm import LinearSVR
 
 # -----------------------------------------------------------------------------
 
@@ -96,7 +103,7 @@ for i in range(patients_data.shape[2]):
     median_to_fill = np.nanmedian(where_to_fill,axis=0)
     
     # Replace the columns with only nan entries by the global means
-    patients_data_try[:,np.where(columns_with_only_nan)] = global_mean[np.where(columns_with_only_nan)]
+    patients_data_try[:,np.where(columns_with_only_nan)] = 0 # global_mean[np.where(columns_with_only_nan)]
     
     
     # Not median anymore but the regression prediction
@@ -167,7 +174,10 @@ percent_one_meas_columns = number_one_meas_columns/patients_data.shape[2]*100
 # create panda frame for number_one_meas_columns
 percent_one_meas_columns_df = pd.DataFrame(data    = percent_one_meas_columns.reshape(1,36), 
                                           columns = train_features_df.columns[1:])
-    
+ 
+
+test_data_vector_v2 = np.zeros((test_data.shape[2], 124))
+   
 # Same for test data ----------------------------------------------------------
 for i in range(test_data.shape[2]):
     test_data_try = test_data[:,:,i]
@@ -186,7 +196,7 @@ for i in range(test_data.shape[2]):
     median_to_fill = np.nanmedian(where_to_fill,axis=0)
     
     # Replace the columns with only nan entries by the global means
-    test_data_try[:,np.where(columns_with_only_nan)] = global_mean[np.where(columns_with_only_nan)]
+    test_data_try[:,np.where(columns_with_only_nan)] = 0 # global_mean[np.where(columns_with_only_nan)]
   
     # Find indicies that you need to replace
     inds = np.where(np.isnan(where_to_fill))
@@ -203,6 +213,27 @@ for i in range(test_data.shape[2]):
     # vectorize patients_data
     test_data_vector[i,:] = np.ndarray.flatten(test_data_try)
     
+    # Calculate the means of the test_data_try
+    test_data_try_mean = np.mean(test_data_try, axis=0)
+    
+    # create second version of feature vector
+    test_data_vector_v2[i, 0:12] = test_data_try[:,0] # time
+    test_data_vector_v2[i, 12:17]   = test_data_try_mean[1:6] # Age, EtCO2, PTT, BUN, Lactate
+    test_data_vector_v2[i, 17:29]   = test_data_try[:,6] # Temp
+    test_data_vector_v2[i, 29:32]   = test_data_try_mean[7:10] # Hgb, HCO3, BaseExcess
+    test_data_vector_v2[i, 32:44]   = test_data_try[:,10] # RRate
+    test_data_vector_v2[i, 44:54]   = test_data_try_mean[11:21] # Fibrinogen - Glucose
+    test_data_vector_v2[i, 54:66]   = test_data_try[:,21] # ABPm
+    test_data_vector_v2[i, 66:68]   = test_data_try_mean[22:24] # Magnesium, Potassium
+    test_data_vector_v2[i, 68:80]   = test_data_try[:,24] # ABPd
+    test_data_vector_v2[i, 80:82]   = test_data_try_mean[25:27] # Calcium, Alkalinephos
+    test_data_vector_v2[i, 82:94]   = test_data_try[:,27] # SpO2
+    test_data_vector_v2[i, 94:97]   = test_data_try_mean[28:31] # Bilirubin_direct, Chloride, Hct
+    test_data_vector_v2[i, 97:109]   = test_data_try[:,31] # Heartrate
+    test_data_vector_v2[i, 109:111]   = test_data_try_mean[32:34] # Bilirubin_total, Troponin1
+    test_data_vector_v2[i, 111:123]   = test_data_try[:,34] # ABPs
+    test_data_vector_v2[i, 123]   = test_data_try_mean[35] # pH
+    
     
 # Replace nan values with 0
 # patients_data_vector = np.nan_to_num(patients_data_vector, nan=0)
@@ -213,7 +244,7 @@ for i in range(test_data.shape[2]):
 toc = time.time()
 print("Data Setup done | Duration = ", toc-tic, "seconds")
 
-"""
+
 # -----------------------------------------------------------------------------
 
 # Subtask 1
@@ -227,17 +258,17 @@ print("Data Setup done | Duration = ", toc-tic, "seconds")
 print("clf  start train and predict")
 tic = time.time()
 
-clf = OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=-1)
+clf = OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=2)
 
 # clf.fit(patients_data_vector[0:500,:], train_labels[0:500, 1:11])
-clf.fit(patients_data_vector[:,:], train_labels[:, 1:11])
+clf.fit(patients_data_vector_v2, train_labels[:, 1:11])
 
 toc = time.time()
 print("clf  training done | Duration = ", toc-tic, "seconds")
 tic = time.time()
 
-predict_labels = clf.predict(test_data_vector)
-predict_distance = clf.decision_function(test_data_vector)
+predict_labels = clf.predict(test_data_vector_v2)
+predict_distance = clf.decision_function(test_data_vector_v2)
 predict_confidence = sigmoid(predict_distance)
 
 toc = time.time()
@@ -253,14 +284,14 @@ print("clf2 start train and predict")
 tic = time.time()
 
 clf_2 = SVC(class_weight='balanced')
-clf_2.fit(patients_data_vector[:,:], train_labels[:, 11])
+clf_2.fit(patients_data_vector_v2, train_labels[:, 11])
 
 toc = time.time()
 print("clf2 training done | Duration = ", toc-tic, "seconds")
 tic = time.time()
 
-predict_labels_sepsis = clf_2.predict(test_data_vector)
-predict_distance_sepsis = clf_2.decision_function(test_data_vector)
+predict_labels_sepsis = clf_2.predict(test_data_vector_v2)
+predict_distance_sepsis = clf_2.decision_function(test_data_vector_v2)
 predict_confidence_sepsis = sigmoid(predict_distance_sepsis)
 
 toc = time.time()
@@ -268,25 +299,110 @@ print("clf2 predicting done | Duration = ", toc-tic, "seconds")
 
 # -----------------------------------------------------------------------------
 
+
 # Subtask 3
 # Predict future mean values of key vital signs
 # LABEL_RRate, LABEL_ABPm, LABEL_SpO2, LABEL_Heartrate
 
-# TODO: Make CrossVal of hyperparameters (Task 1b...)
+# Check if maybe MultioutputRegressor or RegressorChain improves performance 
+
 print("reg  start train and predict")
 tic = time.time()
 
-reg = Ridge(alpha=1.0)
-reg.fit(patients_data_vector[:,:], train_labels[:, 12:])
+# Standardize data
+scaler = StandardScaler()
+
+"""
+# Make CrossVal for different hyperparameters (feature vector, alpha)
+# Define regularization strength 
+alpha = np.logspace(start = -3, stop = 4, num = 5)
+# Regularization Parameter for Support Vector Machine
+C = 1/alpha
+
+# Define Splitting model
+kf = KFold(n_splits = 10,
+           shuffle = True,
+           random_state = 0)
+
+# Allocate RMSE vector
+rmse_avg = np.zeros(([2,len(alpha),2]))
+
+for n in range(2):
+    if n==0 :
+      train_features_vector = patients_data_vector
+    else:
+        train_features_vector = patients_data_vector_v2
+    
+    for i in range(len(alpha)):              # For each alpha
+        clf_ridge = Ridge(alpha = alpha[i], 
+                          fit_intercept = False)
+        
+     
+       
+    
+        clf_lasso = Lasso(alpha = alpha[i],
+                          max_iter = 100000,
+                          tol = 0.0001,
+                          fit_intercept = False)
+ 
+       
+        for train_index, test_index in kf.split(train_features_vector):
+            X_train, X_test = train_features_vector[train_index], train_features_vector[test_index]
+            y_train, y_test = train_labels[train_index, 12:], train_labels[test_index, 12:]
+            
+            # Standardize Data
+            X_train_stand = scaler.fit_transform(X_train)
+            X_test_stand = scaler.transform(X_test)
+            
+            print("Start fit ridge")
+            clf_ridge.fit(X_train_stand,y_train)
+            
+            
+           # clf_sgdrg.fit(X_train,y_train)
+            print("start fit lasso")
+            clf_lasso.fit(X_train_stand,y_train)
+            print("start fit lisvr")
+            # clf_lisvr.fit(X_train_stand,y_train)
+            
+            print("start preidct ridge")
+            y_predict_ridge = clf_ridge.predict(X_test_stand)
+            # y_predict_sgdrg = clf_sgdrg.predict(X_test)
+            print("start preidct lasso")
+            y_predict_lasso = clf_lasso.predict(X_test_stand)
+            # y_predict_lisvr = clf_lisvr.predict(X_test_stand)
+            
+            y_predict = np.dstack((y_predict_ridge,
+                                  # y_predict_sgdrg,
+                                   y_predict_lasso,
+                                  # y_predict_lisvr
+                                  ))
+    
+            for j in range(y_predict.shape[2]):
+            
+                rmse_batch = np.mean(np.linalg.norm((y_test-y_predict[:,:,j]),axis=1))
+                
+                rmse_avg[n,i,j] = rmse_avg[n,i,j] + (rmse_batch)/kf.n_splits
+                
+
+"""
+
+reg = Ridge(alpha=100)
+
+# Standardize data 
+patients_data_vector_v2_stand = scaler.fit_transform(patients_data_vector_v2)
+test_data_vector_v2_stand = scaler.transform(test_data_vector_v2)
+
+reg.fit(patients_data_vector_v2_stand, train_labels[:, 12:])
 
 toc = time.time()
 print("reg  training done | Duration = ", toc-tic, "seconds")
 tic = time.time()
 
-predict_reg = reg.predict(test_data_vector)
+predict_reg = reg.predict(test_data_vector_v2_stand)
 
 toc = time.time()
 print("reg  predicting done | Duration = ", toc-tic, "seconds")
+
 
 
 # -----------------------------------------------------------------------------
@@ -305,6 +421,3 @@ solution_df = pd.DataFrame(data   = solution,
 
 
 solution_df.to_csv('prediction.zip', index=False, float_format='%.3f', compression='zip')
-
-"""
-
