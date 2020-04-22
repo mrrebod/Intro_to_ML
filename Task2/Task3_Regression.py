@@ -1,8 +1,10 @@
+
 """
 Introduction to Machine Learning: Task2
 
 Marco Dober & Vukasin Lalic aka Snorlax
 
+Task 3: Regression 
 """
 # %% Import libraries
 # General
@@ -14,22 +16,12 @@ from shutil import rmtree
 # Model Selection
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
+from sklearn.feature_selection import SelectKBest, f_regression 
 # Preprocessing
-from sklearn.impute import KNNImputer
-from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 # Regressors 
-from sklearn.linear_model import Ridge
-from sklearn.linear_model import LinearRegression
-# Classifier
-from sklearn.multiclass import OneVsRestClassifier
-from sklearn.svm import SVC 
-
-# %% Definition of own functions
-
-# Sigmoid
-def sigmoid(x):
-  return 1 / (1 + np.exp(-x))
+from sklearn.linear_model import Ridge, LinearRegression
+from sklearn.kernel_ridge import KernelRidge
 
 # %% Load data from .csv in pd frame and convert to np array
 
@@ -105,7 +97,7 @@ for i in range(train_features_3D.shape[2]):
     median_to_fill = np.nanmedian(where_to_fill,axis=0)
     
     # Replace the columns with only nan entries by the global means / 0
-    patient_data[:,np.where(columns_with_only_nan)] = 0 # global_mean[np.where(columns_with_only_nan)]
+    patient_data[:,np.where(columns_with_only_nan)] = 0 #global_mean[np.where(columns_with_only_nan)]
     
     # Not median anymore but the regression prediction
     if np.any(columns_to_predict):
@@ -231,263 +223,72 @@ for i in range(test_features_3D.shape[2]):
     test_features_vector_v2[i, 111:123] = patient_data[:,34] # ABPs
     test_features_vector_v2[i, 123]     = patient_data_mean[35] # pH    
 
-X_train    = train_features_vector[:, :]
-X_train_v2 = train_features_vector_v2[:, 12:]
+X_train    = train_features_vector
+X_train_v2 = train_features_vector_v2
 X_test     = test_features_vector
-X_test_v2  = test_features_vector_v2[:, 12:]
+X_test_v2  = test_features_vector_v2
 
 toc = time.time()
 print("Feature vectorization finisched | Duration = ", toc-tic, "seconds")
 
-# %% Create pipeline components used in task 1, 2 & 3
-# Create KNN imputer 
-knn_imputer     = KNNImputer()
-# Create simple imputer 
-simple_imputer  = SimpleImputer()
+
+
+# %% Selcet features 
+selected_features = [] 
+for i in range(12, 16):
+    selector = SelectKBest(f_regression, k='all')
+    selector.fit(X_train_v2, train_labels[:,i])
+    selected_features.append(list(selector.scores_))
+
+
+# Select feature with highest scores 
+threshold_mean = 20 # Chosen after investigation of mean values
+threshold_max = 1000
+selected_features_thresholded = np.mean(selected_features, axis=0) > threshold_mean
+# MaxCS
+# selected_features_thresholded = np.max(selected_features, axis=0) > threshold_max
+
+X_train_v2_new = X_train_v2[:, np.where(selected_features_thresholded)]
+X_train_v2 = X_train_v2_new[:,0,:]
+
+# %% Create pipeline components used in task 3
 # Create standard scaler
 stand_scaler    = StandardScaler()
-# Classifier for task1
-clf_t1 = OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=2)
-# Classifier for task2
-clf_t2 = SVC(class_weight='balanced')
 # Regression for task3
-ridge_regressor = Ridge(fit_intercept=False)
+ridge_regressor = Ridge(fit_intercept=True)
 # store transformers and reuse when possible
 cachedir = mkdtemp()
 
-# %% TASK 1: 
- 
-"""
-# Put everything into pipeline
-pipe_t1 = Pipeline([('imputer', knn_imputer),
-                    ('scaler' , stand_scaler),
-                    ('clf'    , clf_t1)],
-                    memory=cachedir)
-"""
-
-# Put everything into pipeline
-pipe_t1 = Pipeline([#('scaler' , stand_scaler),
-                    ('clf'    , clf_t1)],
-                    memory=cachedir)
-
-"""    
-# Create grid with all hperparameters
-param_grid_t1 = dict(imputer = [KNNImputer(), SimpleImputer()],
-                     clf     = [OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=2),
-                                OneVsRestClassifier(SVC(C=0.1, class_weight='balanced'), n_jobs=2),
-                                OneVsRestClassifier(SVC(C=100, class_weight='balanced'), n_jobs=2),
-                                OneVsRestClassifier(SVC(C=0.1, gamma=0.1, class_weight='balanced'), n_jobs=2),
-                                OneVsRestClassifier(SVC(C=100, gamma=0.1, class_weight='balanced'), n_jobs=2),
-                                OneVsRestClassifier(SVC(C=0.1, gamma=10, class_weight='balanced'), n_jobs=2),
-                                OneVsRestClassifier(SVC(C=100, gamma=10, class_weight='balanced'), n_jobs=2)])
-
-"""
+pipe_t3 = Pipeline([#('selector', feat_select),
+                    ('scaler', stand_scaler),
+                    ('regressor', ridge_regressor)],
+                     memory=cachedir)
 
 # Create grid with all hperparameters
-param_grid_t1 = dict(clf = [OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=2),
-                            OneVsRestClassifier(SVC(C=0.1, class_weight='balanced'), n_jobs=2),
-                            OneVsRestClassifier(SVC(C=100, class_weight='balanced'), n_jobs=2),
-                            OneVsRestClassifier(SVC(C=0.1, gamma=0.1, class_weight='balanced'), n_jobs=2),
-                            OneVsRestClassifier(SVC(C=100, gamma=0.1, class_weight='balanced'), n_jobs=2),
-                            OneVsRestClassifier(SVC(C=0.1, gamma=10, class_weight='balanced'), n_jobs=2),
-                            OneVsRestClassifier(SVC(C=100, gamma=10, class_weight='balanced'), n_jobs=2)])
-
-grid_search_t1 = GridSearchCV(pipe_t1, param_grid_t1)
-
-print("grid_search Task1 started")
-tic = time.time()
-grid_search_t1.fit(X_train, train_labels[0:2000, 1:11])
-toc = time.time()
-print("grid_search Task 1 finisched | Duration = ", toc-tic, "seconds")
-
-print('!!!!!!!!!!!!! Best Params for Task1 !!!!!!!!!!!!!!!!!!!')
-print(grid_search_t1.best_params_)
-print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-# %% TASK 2:
-
-"""
-# Put everything into pipeline
-pipe_t2 = Pipeline([('imputer', knn_imputer),
-                    ('scaler' , stand_scaler),
-                    ('clf'    , clf_t2)],
-                    memory=cachedir)
-"""
-
-# Put everything into pipeline
-pipe_t2 = Pipeline([#('scaler' , stand_scaler),
-                    ('clf'    , clf_t2)],
-                    memory=cachedir)
-"""  
-# Create grid with all hperparameters
-param_grid_t2 = dict(imputer    = [KNNImputer(), SimpleImputer()],
-                     clf__C     = [0.01, 0.1, 1, 10, 100, 1000], 
-                     clf__gamma = ['scale', 0.01, 0.1, 1, 10, 1000])
-"""
-
-# Create grid with all hperparameters
-param_grid_t2 = dict(clf__C     = [0.001, 0.01, 0.1, 1, 10, 100, 1000], 
-                     clf__gamma = ['scale', 0.01, 0.1, 1, 10, 1000])
-
-grid_search_t2 = GridSearchCV(pipe_t2, param_grid_t2, scoring='balanced_accuracy')
-
-print("grid_search Task2 started")
-tic = time.time()
-grid_search_t2.fit(X_train, train_labels[0:2000, 11])
-toc = time.time()
-print("grid_search Task2 finisched | Duration = ", toc-tic, "seconds")
-
-print('!!!!!!!!!!!!! Best Params for Task2 !!!!!!!!!!!!!!!!!!!')
-print(grid_search_t2.best_params_)
-print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-# %% TASK 3
-"""
-# Put everything into pipeline
-pipe_t3 = Pipeline([('imputer', knn_imputer),
-                 ('scaler', stand_scaler),
-                 ('regressor', ridge_regressor)],
-                memory=cachedir)
-"""
-
-# Put everything into pipeline
-pipe_t3 = Pipeline([#('scaler', stand_scaler),
-                 ('regressor', ridge_regressor)],
-                memory=cachedir)
-
-# Create grid with all hperparameters
-param_grid_t3 = dict(regressor__alpha=[0.1, 1, 10, 100, 1000, 2000])
+param_grid_t3 = dict(scaler=['passthrough', stand_scaler],
+                     regressor=[ridge_regressor, KernelRidge(kernel='rbf')],
+                     regressor__alpha=[1, 1000, 150000],
+                     #regressor__fit_intercept = [True, False]
+                     )
 
 # Make grid search for best paramters with 5-fold CrossVal
 grid_search_t3 = GridSearchCV(pipe_t3, param_grid_t3, scoring='r2')
 
 print("grid_search X_train_v2 started")
 tic = time.time()
-grid_search_t3.fit(X_train, train_labels[0:2000, 12:])
+grid_search_t3.fit(X_train_v2, train_labels[:, 12:])
 toc = time.time()
 print("grid_search  finisched | Duration = ", toc-tic, "seconds")
 
 print('!!!!!!!!!!!!! Best Params for Task3 !!!!!!!!!!!!!!!!!!!')
 print(grid_search_t3.best_params_)
 print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-# %%
-# Clear the cache directory when you don't need it anymore
-rmtree(cachedir)
-
-# %% Refit models with all the trainings samples and the best parameters 
-
-X_train_v2 = train_features_vector_v2[:, 12:]
-X_train    = train_features_vector
-
-# Task 1
-print("Refit Task 1 started")
-tic = time.time()
-# grid_search_t1.fit(X_train_v2, train_labels[:, 1:11])
-pipe_t1_final = Pipeline([#('scaler' , stand_scaler),
-                          ('clf'    , OneVsRestClassifier(SVC(class_weight='balanced'), n_jobs=2))],
-                           memory=cachedir)
-pipe_t1_final.fit(X_train_v2, train_labels[:, 1:11])
-toc = time.time()
-print("Refit Task 1  finisched | Duration = ", toc-tic, "seconds")
+print('!!!!!!!!!!!!! Best CV Score for Task3 !!!!!!!!!!!!!!!!!!!')
+print(grid_search_t3.best_score_)
+print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
 
-# Task 2
-print("Refit Task 2 started")
-tic = time.time()
-# grid_search_t2.fit(X_train_v2, train_labels[:, 1:11], clf__C=0.1, clf__gamma=0.01)
-pipe_t2_final = Pipeline([#('scaler' , stand_scaler),
-                          ('clf'    , SVC(class_weight='balanced'))],
-                         memory=cachedir)
-pipe_t2_final.fit(X_train_v2, train_labels[:, 11])
-toc = time.time()
-print("Refit Task 2  finisched | Duration = ", toc-tic, "seconds")
- 
-# Task 3
-print("Refit Task 3 started")
-tic = time.time()
-# grid_search_t2.fit(X_train_v2, train_labels[:, 1:11], clf__C=0.1, clf__gamma=0.01)
-pipe_t3_final = Pipeline([#('scaler' , stand_scaler),
-                          ('regressor', Ridge(fit_intercept=True))],
-                         memory=cachedir)
-pipe_t3_final.fit(X_train_v2, train_labels[:, 12:])
-toc = time.time()
-print("Refit Task 3  finisched | Duration = ", toc-tic, "seconds")
-
-# %% Predict labels with best estimator 
-
-# Task1:
-print("Predict Task 1 started")
-tic = time.time()
-# predict_labels = grid_search_t1.predict(X_test)
-predict_labels = pipe_t1_final.predict(X_test_v2)
-toc = time.time()
-print("Predict Task 1  finisched | Duration = ", toc-tic, "seconds")
-# predict_distance = grid_search_t1.decision_function(X_test)
-predict_distance = pipe_t1_final.decision_function(X_test_v2)
-predict_confidence = sigmoid(predict_distance)
-
-# Task2:
-print("Predict Task 2 started")
-tic = time.time()
-# predict_labels_sepsis = grid_search_t2.predict(X_test)
-predict_labels_sepsis = pipe_t2_final.predict(X_test_v2)
-toc = time.time()
-print("Predict Task 2  finisched | Duration = ", toc-tic, "seconds")
-# predict_distance_sepsis = grid_search_t2.decision_function(X_test)
-predict_distance_sepsis = pipe_t2_final.decision_function(X_test_v2)
-predict_confidence_sepsis = sigmoid(predict_distance_sepsis)
-
-# Task3:
-print("Predict Task 3 started")
-tic = time.time()
-# predict_reg = grid_search_t3.predict(X_test)
-predict_reg = pipe_t3_final.predict(X_test_v2)
-toc = time.time()
-print("Predict Task 3 finisched | Duration = ", toc-tic, "seconds")
-
-# %% Save results 
-
-test_pid_array = np.reshape(test_pid, (test_pid.shape[0],1))
-predict_confidence_sepsis_array = np.reshape(predict_confidence_sepsis, (predict_confidence_sepsis.shape[0],1))
-
-solution = np.concatenate((predict_confidence, predict_confidence_sepsis_array), axis=1)
-solution = np.concatenate((solution, predict_reg), axis=1)
-solution = np.concatenate((test_pid_array, solution), axis=1)
-
-solution_df = pd.DataFrame(data   = solution,
-                           index  = np.arange(0,solution.shape[0]),
-                           columns = train_labels_df.columns)
 
 
-solution_df.to_csv('prediction.zip', index=False, float_format='%.3f', compression='zip') 
 
-#KNN_Imputer = KNNImputer()
-#X_imputed = KNN_Imputer.fit_transform(X_train_v2)
 
-"""
-# Fit with first feature vector
-print("Fit X_train started")
-tic = time.time()
-reg.fit(X_train, train_labels)
-toc = time.time()
-print("Fit X_train  finisched | Duration = ", toc-tic, "seconds")
-print("score X_train started")
-tic = time.time()
-score = reg.score(X_train, train_labels)
-toc = time.time()
-print("Score finisched | Duration = ", toc-tic, "seconds")
-
-# Fit with second feature vector
-print("Fit X_train_v2 started")
-tic = time.time()
-pipe.fit(X_train_v2, train_labels)
-toc = time.time()
-print("Fit X_train_v2  finisched | Duration = ", toc-tic, "seconds")
-print("score X_train_v2 started")
-tic = time.time()
-score_v2 = pipe.score(X_train_v2, train_labels)
-toc = time.time()
-print("Score finisched | Duration = ", toc-tic, "seconds")
-
-"""
