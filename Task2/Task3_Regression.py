@@ -22,6 +22,8 @@ from sklearn.preprocessing import StandardScaler
 # Regressors 
 from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.kernel_ridge import KernelRidge
+# Classifiers
+from sklearn.svm import SVC 
 
 # %% Load data from .csv in pd frame and convert to np array
 
@@ -38,6 +40,9 @@ train_labels   = train_labels_df.to_numpy()
 # %% Create Feature vector out of the 12*35 measurements
 print("Feature vector creation starts")
 tic = time.time()
+
+# Calculate the global mean of each column (except pid)
+global_mean = np.nanmean(train_features[:,1:], axis=0)
 
 # --------------------------------------------------------    
 # Create a 3D array where the third dimension is the patient and the first two
@@ -233,6 +238,37 @@ print("Feature vectorization finisched | Duration = ", toc-tic, "seconds")
 
 
 
+# %% Task2 
+
+X_train_new = SelectKBest(k=10).fit_transform(X_train, train_labels[:, 11])
+
+
+pipe_t2 = Pipeline([#('scaler' , stand_scaler),
+                    ('clf'    , SVC(class_weight='balanced'))]
+                   )
+
+param_grid_t2 = dict(clf__C     = [ 1], 
+                     clf__gamma = ['scale'])
+
+
+
+grid_search_t2 = GridSearchCV(pipe_t2, param_grid_t2, scoring='balanced_accuracy')
+
+print("grid_search Task2 started")
+tic = time.time()
+grid_search_t2.fit(X_train_new, train_labels[:, 11])
+toc = time.time()
+print("grid_search Task2 finisched | Duration = ", toc-tic, "seconds")
+
+print('!!!!!!!!!!!!! Best Params for Task2 !!!!!!!!!!!!!!!!!!!')
+print(grid_search_t2.best_params_)
+print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+print('!!!!!!!!!!!!! Best CV Score for Task2 !!!!!!!!!!!!!!!!!!!')
+print(grid_search_t2.best_score_)
+print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+# %% Task3:
+
 # %% Selcet features 
 selected_features = [] 
 for i in range(12, 16):
@@ -242,11 +278,11 @@ for i in range(12, 16):
 
 
 # Select feature with highest scores 
-threshold_mean = 20 # Chosen after investigation of mean values
-threshold_max = 1000
+threshold_mean = 1000 # Chosen after investigation of mean values
+threshold_max = 2000
 selected_features_thresholded = np.mean(selected_features, axis=0) > threshold_mean
 # MaxCS
-# selected_features_thresholded = np.max(selected_features, axis=0) > threshold_max
+#selected_features_thresholded = np.max(selected_features, axis=0) > threshold_max
 
 X_train_v2_new = X_train_v2[:, np.where(selected_features_thresholded)]
 X_train_v2 = X_train_v2_new[:,0,:]
@@ -266,9 +302,9 @@ pipe_t3 = Pipeline([#('selector', feat_select),
 
 # Create grid with all hperparameters
 param_grid_t3 = dict(scaler=['passthrough', stand_scaler],
-                     regressor=[ridge_regressor, KernelRidge(kernel='rbf')],
-                     regressor__alpha=[1, 1000, 150000],
-                     #regressor__fit_intercept = [True, False]
+                     #regressor=[ridge_regressor, KernelRidge(kernel='rbf')],
+                     regressor__alpha=[1, 10, 100, 1000, 10000, 150000],
+                     regressor__fit_intercept = [True, False]
                      )
 
 # Make grid search for best paramters with 5-fold CrossVal
