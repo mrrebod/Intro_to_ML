@@ -13,6 +13,12 @@ import pandas as pd
 import time
 # Preprocessing
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
+from sklearn.kernel_approximation import Nystroem
+# Model Selection
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import f1_score
 # Classifiers 
 from sklearn.svm import LinearSVC
 from sklearn.svm import SVC
@@ -78,21 +84,51 @@ train_features_enc = enc.fit_transform(train_features_split).toarray()
 test_features_enc = enc.transform(test_features_split).toarray()
 
 
-# %% Train classifier 
+# %% Train Classifier
 
-#clf = LinearSVC(C = 1000, class_weight = 'balanced', max_iter=10000)
-clf = SVC(class_weight = 'balanced')
+# Components of pipeline
+# Scaler 
+stand_scaler = StandardScaler()
 
-print("start train")
+# Transformer (Creates an estimation of kernel transform)
+feature_map_nystrom = Nystroem(kernel = 'rbf',
+                               random_state = 1,
+                               n_components = 300)
+
+# Classifier 
+clf_SVC = LinearSVC(class_weight = 'balanced', max_iter = 10000, fit_intercept = False)
+
+# Create pipeline
+pipe = Pipeline([('scaler', stand_scaler),
+                 ('transformer', feature_map_nystrom),
+                 ('clf', clf_SVC)]) 
+
+# Hyperparameters to evaluate best model 
+param_gird = dict(scaler = ['passthrough', stand_scaler],
+                  transformer = ['passthrough', feature_map_nystrom],
+                  clf__C = [1, 100, 10000])
+
+# Make grid search for best model
+grid_search = GridSearchCV(pipe, param_gird, scoring='f1', cv=3, n_jobs=2)
+
+# Fit to train data 
+print("grid_search started")
 tic = time.time()
-clf.fit(train_features_enc[:,:], train_labels[:])
+grid_search.fit(train_features_enc[:,:], train_labels[:])
 toc = time.time()
-print("training done | Duration = ", toc-tic, "seconds")
+print("grid_search  finisched | Duration = ", toc-tic, "seconds")
 
-# %% Predict labels of test features 
+print('!!!!!!!!!!!!! Best Params !!!!!!!!!!!!!!!!!!!')
+print(grid_search.best_params_)
+print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+print('!!!!!!!!!!!!! Best CV Score !!!!!!!!!!!!!!!!!!!')
+print(grid_search.best_score_)
+print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+# %% Predict labels of test features with best model
 print("start predict")
 tic = time.time()
-test_labels = clf.predict(test_features_enc)
+test_labels = grid_search.predict(test_features_enc)
 toc = time.time()
 print("predict done | Duration = ", toc-tic, "seconds")
 
