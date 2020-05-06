@@ -93,23 +93,23 @@ stand_scaler = StandardScaler()
 # Transformer (Creates an estimation of kernel transform)
 feature_map_nystrom = Nystroem(kernel = 'rbf',
                                random_state = 1,
-                               n_components = 300)
+                               n_components = 100)
 
 # Classifier 
 clf_SVC = LinearSVC(class_weight = 'balanced', max_iter = 10000, fit_intercept = False)
 
 # Create pipeline
-pipe = Pipeline([('scaler', stand_scaler),
-                 ('transformer', feature_map_nystrom),
+pipe = Pipeline([('transformer', feature_map_nystrom),
+                 ('scaler', stand_scaler),
                  ('clf', clf_SVC)]) 
 
 # Hyperparameters to evaluate best model 
-param_gird = dict(scaler = ['passthrough', stand_scaler],
-                  transformer = ['passthrough', feature_map_nystrom],
-                  clf__C = [1, 100, 10000])
+param_grid = dict(transformer = ['passthrough', feature_map_nystrom],
+                  scaler      = ['passthrough', stand_scaler], 
+                  clf__C      = [1, 100, 10000])
 
 # Make grid search for best model
-grid_search = GridSearchCV(pipe, param_gird, scoring='f1', cv=3, n_jobs=2)
+grid_search = GridSearchCV(pipe, param_grid, scoring='f1', cv=3, n_jobs=2)
 
 # Fit to train data 
 print("grid_search started")
