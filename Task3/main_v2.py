@@ -35,14 +35,16 @@ from sklearn.gaussian_process.kernels import RBF
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import classification_report
 from sklearn.metrics import precision_recall_fscore_support
+# Plot
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 
 
 #%% Resample
-def resample(X_train, y_train):
+def downsample(X_train, y_train):
     
-    # Setp 1: Downsample (Remove some of the majority data points)
-    numbers_to_keep = np.count_nonzero(y_train) # *4 Arbitrarly choosen
+    numbers_to_keep = np.count_nonzero(y_train) * 10 # Arbitrarly choosen
     X_train_inactive = X_train[y_train==0]
     X_train_active   = X_train[y_train==1]
     
@@ -52,6 +54,29 @@ def resample(X_train, y_train):
     y_keep = np.ones((X_keep.shape[0],))
     X_keep = np.append(X_keep, X_train_active, axis=0)
     y_keep = np.append(y_keep, np.zeros((X_train_active.shape[0],)))
+        
+    return X_keep, y_keep
+
+
+def resample(X_train, y_train):
+    
+    # Setp 1: Downsample (Remove some of the majority data points)
+    numbers_to_keep = np.count_nonzero(y_train) * 20 # Arbitrarly choosen
+    X_train_inactive = X_train[y_train==0]
+    X_train_active   = X_train[y_train==1]
+    
+    index_to_keep = np.random.choice(X_train_inactive.shape[0], numbers_to_keep, replace=False) 
+    
+    # Put the resulting array together
+    X_keep = X_train_inactive[index_to_keep]
+    X_keep = np.append(X_keep, X_train_active, axis=0)
+    y_keep = np.ones((X_keep.shape[0],))
+    y_keep = np.append(y_keep, np.zeros((X_train_active.shape[0],)))
+    
+    # Shuffle the array
+    rng = np.random.default_rng(seed=0)
+    rng.shuffle(X_keep)
+    rng.shuffle(y_keep)
     
     # Step 2: Upsample (Duplicate some minority datapoints with additional small noise)
     # numbers_to_add
@@ -113,13 +138,13 @@ for i in range(0,len(test_features)):
 # One-hot-encode train and test features 
 # initalize type of encoder 
 enc = OneHotEncoder(handle_unknown='ignore')
-# enc = OrdinalEncoder()
+ord_enc = OrdinalEncoder()
 # fit and transform to train features
-# train_features_enc = enc.fit_transform(train_features_split)
-train_features_enc = enc.fit_transform(train_features_split).toarray()
+train_features_ord_enc = ord_enc.fit_transform(train_features_split)
+train_features_enc     = enc.fit_transform(train_features_split).toarray()
 # transform test features 
-# test_features_enc = enc.transform(test_features_split)
-test_features_enc = enc.transform(test_features_split).toarray()
+test_features_ord_enc = ord_enc.transform(test_features_split)
+test_features_enc     = enc.transform(test_features_split).toarray()
 
     
 #%% Stratified K Fold
@@ -149,9 +174,10 @@ for clf in list_of_classifiers:
         
         
         # TODO: Resample the training subset only
-        # X_train,y_train = resample(X_train, y_train)
+        # X_sampled,y_sampled = resample(X_train, y_train)
+        X_sampled, y_sampled = X_train, y_train
         
-        clf.fit(X_train,y_train)
+        clf.fit(X_sampled,y_sampled)
         y_predict = clf.predict(X_test)
         
         # --classification report --
@@ -199,19 +225,21 @@ print("StratifiedKFold done | Duration = ", toc-tic, "seconds")
 
 #%% Plot
 # Only works with the Ordinal Encoding
-# import matplotlib.pyplot as plt
-# from mpl_toolkits.mplot3d import Axes3D
-# fig = plt.figure()
-# ax = fig.add_subplot(111, projection='3d')
 
-# plt.title("First Letter A") # Corresponds to encoded 0
+fig = plt.figure()
 
-# letter_a_featr = test_features_enc[np.where(test_features_enc[:,0] == 0)]
-# letter_a_label = test_labels[np.where(test_features_enc[:,0] == 0)]
+for i in range(0,20):
+    ax = fig.add_subplot(4, 5, 1+i, projection='3d')
+    
+    plt.title('First Letter ' + ord_enc.categories_[0][i])
+    
+    # Get the 3dimensional fetures when the first letter is fixed (reduces from 4d to 3d)
+    first_letter_feature = train_features_ord_enc[np.where(train_features_ord_enc[:,0] == i)]
+    first_letter_label   = train_labels[np.where(train_features_ord_enc[:,0] == i)]
+    
+    ax.scatter3D(first_letter_feature[:,1], first_letter_feature[:,2], first_letter_feature[:,3], c=first_letter_label)
 
-# ax.scatter3D(letter_a_featr[:,1], letter_a_featr[:,2], letter_a_featr[:,3], c=letter_a_label)
-
-# plt.show()
+plt.show()
 
 
 
