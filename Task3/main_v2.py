@@ -31,6 +31,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
+from sklearn.neighbors import KNeighborsClassifier
 # Metrics
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import classification_report
@@ -42,26 +43,11 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 #%% Resample
-def downsample(X_train, y_train):
-    
-    numbers_to_keep = np.count_nonzero(y_train) * 10 # Arbitrarly choosen
-    X_train_inactive = X_train[y_train==0]
-    X_train_active   = X_train[y_train==1]
-    
-    index_to_keep = np.random.choice(X_train_inactive.shape[0], numbers_to_keep, replace=False) 
-    
-    X_keep = X_train_inactive[index_to_keep]
-    y_keep = np.ones((X_keep.shape[0],))
-    X_keep = np.append(X_keep, X_train_active, axis=0)
-    y_keep = np.append(y_keep, np.zeros((X_train_active.shape[0],)))
-        
-    return X_keep, y_keep
-
-
 def resample(X_train, y_train):
     
-    # Setp 1: Downsample (Remove some of the majority data points)
-    numbers_to_keep = np.count_nonzero(y_train) * 20 # Arbitrarly choosen
+    sampling_rate = 15
+    # Step 1: Downsample (Remove some of the majority data points)
+    numbers_to_keep = np.count_nonzero(y_train) * sampling_rate # Arbitrarly choosen
     X_train_inactive = X_train[y_train==0]
     X_train_active   = X_train[y_train==1]
     
@@ -69,18 +55,15 @@ def resample(X_train, y_train):
     
     # Put the resulting array together
     X_keep = X_train_inactive[index_to_keep]
-    X_keep = np.append(X_keep, X_train_active, axis=0)
-    y_keep = np.ones((X_keep.shape[0],))
-    y_keep = np.append(y_keep, np.zeros((X_train_active.shape[0],)))
-    
-    # Shuffle the array
-    rng = np.random.default_rng(seed=0)
-    rng.shuffle(X_keep)
-    rng.shuffle(y_keep)
+    y_keep = np.zeros((X_keep.shape[0],))
+
     
     # Step 2: Upsample (Duplicate some minority datapoints with additional small noise)
     # numbers_to_add
+    X_train_active_rep = np.repeat(X_train_active, 10, axis=0)
     
+    X_keep = np.append(X_keep, X_train_active_rep, axis=0)
+    y_keep = np.append(y_keep, np.ones((X_train_active_rep.shape[0],)))
     
     return X_keep, y_keep
 
@@ -158,10 +141,11 @@ y = train_labels
 
 # Try out different classifiers
 list_of_classifiers = [GaussianNB(),
-                       LinearSVC(class_weight = 'balanced',max_iter=10000),
+                       LinearSVC(max_iter=10000),
                        DecisionTreeClassifier(random_state=0),
-                       RandomForestClassifier(random_state=0)]
+                       RandomForestClassifier(n_estimators=50,random_state=0)]
 
+# class_weight={0:0.5,1:20}
 # Allocate Scores 
 scores_avg = np.zeros((len(list_of_classifiers),4))
 clf_keeper = []
@@ -174,8 +158,10 @@ for clf in list_of_classifiers:
         
         
         # TODO: Resample the training subset only
-        # X_sampled,y_sampled = resample(X_train, y_train)
-        X_sampled, y_sampled = X_train, y_train
+        X_sampled,y_sampled = resample(X_train, y_train)
+        print(np.round(np.count_nonzero(y_sampled)/len(y_sampled)*100, 2), "% of proteins are active in sampled")
+        
+        # X_sampled, y_sampled = X_train, y_train
         
         clf.fit(X_sampled,y_sampled)
         y_predict = clf.predict(X_test)
@@ -226,20 +212,20 @@ print("StratifiedKFold done | Duration = ", toc-tic, "seconds")
 #%% Plot
 # Only works with the Ordinal Encoding
 
-fig = plt.figure()
+# fig = plt.figure()
 
-for i in range(0,20):
-    ax = fig.add_subplot(4, 5, 1+i, projection='3d')
+# for i in range(0,20):
+#     ax = fig.add_subplot(4, 5, 1+i, projection='3d')
     
-    plt.title('First Letter ' + ord_enc.categories_[0][i])
+#     plt.title('First Letter ' + ord_enc.categories_[0][i])
     
-    # Get the 3dimensional fetures when the first letter is fixed (reduces from 4d to 3d)
-    first_letter_feature = train_features_ord_enc[np.where(train_features_ord_enc[:,0] == i)]
-    first_letter_label   = train_labels[np.where(train_features_ord_enc[:,0] == i)]
+#     # Get the 3dimensional fetures when the first letter is fixed (reduces from 4d to 3d)
+#     first_letter_feature = train_features_ord_enc[np.where(train_features_ord_enc[:,0] == i)]
+#     first_letter_label   = train_labels[np.where(train_features_ord_enc[:,0] == i)]
     
-    ax.scatter3D(first_letter_feature[:,1], first_letter_feature[:,2], first_letter_feature[:,3], c=first_letter_label)
+#     ax.scatter3D(first_letter_feature[:,1], first_letter_feature[:,2], first_letter_feature[:,3], c=first_letter_label)
 
-plt.show()
+# plt.show()
 
 
 
@@ -252,5 +238,5 @@ print("predict done | Duration = ", toc-tic, "seconds")
 
 
 # %% Save test labels to csv
-np.savetxt('submission.csv', test_labels, fmt='%1.0f')
+np.savetxt('submission_v2.csv', test_labels, fmt='%1.0f')
 
