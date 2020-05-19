@@ -22,8 +22,33 @@ from sklearn.metrics import f1_score
 # Classifiers 
 from sklearn.svm import LinearSVC
 from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
 
 
+#%% Resample
+def resample(X_train, y_train):
+    
+    sampling_rate = 15
+    # Step 1: Downsample (Remove some of the majority data points)
+    numbers_to_keep = np.count_nonzero(y_train) * sampling_rate # Arbitrarly choosen
+    X_train_inactive = X_train[y_train==0]
+    X_train_active   = X_train[y_train==1]
+    
+    index_to_keep = np.random.choice(X_train_inactive.shape[0], numbers_to_keep, replace=False) 
+    
+    # Put the resulting array together
+    X_keep = X_train_inactive[index_to_keep]
+    y_keep = np.zeros((X_keep.shape[0],))
+
+    
+    # Step 2: Upsample (Duplicate some minority datapoints with additional small noise)
+    # numbers_to_add
+    X_train_active_rep = np.repeat(X_train_active, 10, axis=0)
+    
+    X_keep = np.append(X_keep, X_train_active_rep, axis=0)
+    y_keep = np.append(y_keep, np.ones((X_train_active_rep.shape[0],)))
+    
+    return X_keep, y_keep
 
 # %% Read in data sets and convert to numpy arrays 
 
@@ -87,34 +112,24 @@ test_features_enc = enc.transform(test_features_split).toarray()
 # %% Train Classifier
 
 # Components of pipeline
-# Scaler 
-stand_scaler = StandardScaler()
-
-# Transformer (Creates an estimation of kernel transform)
-feature_map_nystrom = Nystroem(kernel = 'rbf',
-                               random_state = 1,
-                               n_components = 100)
 
 # Classifier 
-clf_SVC = LinearSVC(class_weight = 'balanced', max_iter = 10000, fit_intercept = False)
+clf_RandomForest = RandomForestClassifier(random_state=0)
 
 # Create pipeline
-pipe = Pipeline([('transformer', feature_map_nystrom),
-                 ('scaler', stand_scaler),
-                 ('clf', clf_SVC)]) 
+pipe = Pipeline([('clf', clf_RandomForest)]) 
 
 # Hyperparameters to evaluate best model 
-param_grid = dict(transformer = ['passthrough', feature_map_nystrom],
-                  scaler      = ['passthrough', stand_scaler], 
-                  clf__C      = [1, 100, 10000])
+param_grid = dict()
 
 # Make grid search for best model
-grid_search = GridSearchCV(pipe, param_grid, scoring='f1', cv=3, n_jobs=2)
+grid_search = GridSearchCV(pipe, param_grid, scoring='f1', cv=3)
 
 # Fit to train data 
 print("grid_search started")
 tic = time.time()
-grid_search.fit(train_features_enc[:,:], train_labels[:])
+X_sampled, y_sampled = resample(train_features_enc, train_labels)
+grid_search.fit(X_sampled, y_sampled)
 toc = time.time()
 print("grid_search  finisched | Duration = ", toc-tic, "seconds")
 
@@ -125,13 +140,21 @@ print('!!!!!!!!!!!!! Best CV Score !!!!!!!!!!!!!!!!!!!')
 print(grid_search.best_score_)
 print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
+"""
+clf = RandomForestClassifier(bootstrap = False, random_state=1)
+
+X_sampled, y_sampled = resample(train_features_enc, train_labels)
+clf.fit(X_sampled, y_sampled)
+test_labels_v11 = clf.predict(test_features_enc)
+"""
+
 # %% Predict labels of test features with best model
 print("start predict")
 tic = time.time()
-test_labels = grid_search.predict(test_features_enc)
+test_labels_v1 = grid_search.predict(test_features_enc)
 toc = time.time()
 print("predict done | Duration = ", toc-tic, "seconds")
 
 # %% Save test labels to csv
-np.savetxt('submission.csv', test_labels, fmt='%1.0f')
+np.savetxt('submission.csv', test_labels_v1, fmt='%1.0f')
 
