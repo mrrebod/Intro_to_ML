@@ -11,18 +11,22 @@ Marco Dober & Vukasin Lalic aka Snorlax
 import numpy as np 
 import pandas as pd
 import time
+from sklearn.utils import shuffle
 # Preprocessing
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.kernel_approximation import Nystroem
+from sklearn.feature_selection import SelectKBest
 # Model Selection
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score
+from sklearn.model_selection import StratifiedKFold
 # Classifiers 
 from sklearn.svm import LinearSVC
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import AdaBoostClassifier
 
 
 #%% Resample
@@ -43,10 +47,12 @@ def resample(X_train, y_train):
     
     # Step 2: Upsample (Duplicate some minority datapoints with additional small noise)
     # numbers_to_add
-    X_train_active_rep = np.repeat(X_train_active, 10, axis=0)
+    X_train_active_rep = np.repeat(X_train_active, 15, axis=0)
     
     X_keep = np.append(X_keep, X_train_active_rep, axis=0)
     y_keep = np.append(y_keep, np.ones((X_train_active_rep.shape[0],)))
+    
+    X_keep, y_keep = shuffle(X_keep, y_keep, random_state=42)
     
     return X_keep, y_keep
 
@@ -58,10 +64,11 @@ train_set_df     = pd.read_csv('train.csv')
 
 # Convert to numpy
 test_features  = test_features_df.to_numpy()
+test_features  = test_features.flatten()
 train_set      = train_set_df.to_numpy() 
 train_features = train_set[:,0]
 train_labels   = train_set[:,1]
-train_labels = train_labels.astype(int)
+train_labels   = train_labels.astype(int)
 
 # %% Statistics of train set
 
@@ -113,23 +120,44 @@ test_features_enc = enc.transform(test_features_split).toarray()
 
 # Components of pipeline
 
-# Classifier 
-clf_RandomForest = RandomForestClassifier(random_state=0)
+# Scaler 
+stand_scaler = StandardScaler()
 
+# Feature selection 
+select = SelectKBest()
+
+# Classifier 
+clf_RandomForest = RandomForestClassifier(bootstrap = False, random_state=42)
+clf_AdaBoost = AdaBoostClassifier(random_state=42)
+    
 # Create pipeline
-pipe = Pipeline([('clf', clf_RandomForest)]) 
+pipe = Pipeline([#('scaler', stand_scaler),
+                 #('selector', select),
+                 ('clf', clf_RandomForest)]) 
 
 # Hyperparameters to evaluate best model 
-param_grid = dict()
+param_grid = dict(#scaler            = ['passthrough', stand_scaler],
+                  #selector__k       = ['all', 10, 30, 60],
+                  clf               = [clf_AdaBoost],
+                  #clf__class_weight = [{0:0.05,1:25}, {0:0.03,1:30}],
+                  clf__n_estimators = [300],
+                 #clf__max_features = ['sqrt', None]
+                  )
 
 # Make grid search for best model
-grid_search = GridSearchCV(pipe, param_grid, scoring='f1', cv=3)
+grid_search = GridSearchCV(pipe, 
+                           param_grid, 
+                           scoring=['f1', 'precision', 'recall'], 
+                           cv=StratifiedKFold(n_splits=3), 
+                           refit='f1')
+
+
+train_features_enc, train_labels = resample(train_features_enc, train_labels)
 
 # Fit to train data 
 print("grid_search started")
 tic = time.time()
-X_sampled, y_sampled = resample(train_features_enc, train_labels)
-grid_search.fit(X_sampled, y_sampled)
+grid_search.fit(train_features_enc, train_labels)
 toc = time.time()
 print("grid_search  finisched | Duration = ", toc-tic, "seconds")
 
@@ -140,21 +168,16 @@ print('!!!!!!!!!!!!! Best CV Score !!!!!!!!!!!!!!!!!!!')
 print(grid_search.best_score_)
 print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
-"""
-clf = RandomForestClassifier(bootstrap = False, random_state=1)
-
-X_sampled, y_sampled = resample(train_features_enc, train_labels)
-clf.fit(X_sampled, y_sampled)
-test_labels_v11 = clf.predict(test_features_enc)
-"""
+# Save results into panda frame
+cv_result_df = pd.DataFrame(grid_search.cv_results_)
 
 # %% Predict labels of test features with best model
 print("start predict")
 tic = time.time()
-test_labels_v1 = grid_search.predict(test_features_enc)
+test_labels = grid_search.predict(test_features_enc)
 toc = time.time()
 print("predict done | Duration = ", toc-tic, "seconds")
 
 # %% Save test labels to csv
-np.savetxt('submission.csv', test_labels_v1, fmt='%1.0f')
+#np.savetxt('submission.csv', test_labels, fmt='%1.0f')
 

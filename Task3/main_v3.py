@@ -142,8 +142,8 @@ y = train_labels
 # Try out different classifiers
 list_of_classifiers = [GaussianNB(),
                        LinearSVC(max_iter=10000),
-                       DecisionTreeClassifier(random_state=0),
-                       RandomForestClassifier(bootstrap = False, random_state=0)]
+                       DecisionTreeClassifier(random_state=42),
+                       RandomForestClassifier(bootstrap = False, random_state=42, class_weight={0:1/15,1:10})]
 
 # class_weight={0:0.5,1:20}
 # Allocate Scores 
@@ -158,10 +158,10 @@ for clf in list_of_classifiers:
         
         
         # TODO: Resample the training subset only
-        X_sampled,y_sampled = resample(X_train, y_train)
-        print(np.round(np.count_nonzero(y_sampled)/len(y_sampled)*100, 2), "% of proteins are active in sampled")
+        #X_sampled,y_sampled = resample(X_train, y_train)
+        #print(np.round(np.count_nonzero(y_sampled)/len(y_sampled)*100, 2), "% of proteins are active in sampled")
         
-        # X_sampled, y_sampled = X_train, y_train
+        X_sampled, y_sampled = X_train, y_train
         
         clf.fit(X_sampled,y_sampled)
         y_predict = clf.predict(X_test)
@@ -187,7 +187,8 @@ scores_df = pd.DataFrame(data=scores_avg,    # values
 clf_best = clf_keeper[np.argmax(scores_df.f1)]
 
 # Refit best model with whole data set 
-X_sampled, y_sampled = resample(train_features_enc, train_labels)
+#X_sampled, y_sampled = resample(train_features_enc, train_labels)
+X_sampled, y_sampled = train_features_enc, train_labels
 clf_best.fit(X_sampled, y_sampled)
 
 toc = time.time()
@@ -234,9 +235,11 @@ print("StratifiedKFold done | Duration = ", toc-tic, "seconds")
 """
 clf = clf_best
 
-X_sampled, y_sampled = resample(train_features_enc, train_labels)
+clf = RandomForestClassifier(bootstrap = False, random_state=42, class_weight={0:1/15,1:10})
+#X_sampled, y_sampled = resample(train_features_enc, train_labels)
+X_sampled, y_sampled = train_features_enc, train_labels
 clf.fit(X_sampled, y_sampled)
-test_labels_v11 = clf.predict(test_features_enc)
+test_labels_v1 = clf.predict(test_features_enc)
 """
 
 # %% Predict labels of test features with best model
@@ -248,5 +251,5 @@ print("predict done | Duration = ", toc-tic, "seconds")
 
 
 # %% Save test labels to csv
-np.savetxt('submission_v3.csv', test_labels, fmt='%1.0f')
+#np.savetxt('submission_v3.csv', test_labels, fmt='%1.0f')
 
