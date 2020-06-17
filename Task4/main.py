@@ -66,99 +66,121 @@ toc = time.time()
 print("Resizing done | Duration = ", toc-tic, "seconds")
 """
 
-# %% Get pretrained model
+# %% Feature Generation
 print("Start Feature Generation")
 tic = time.time()
 
 model = VGG16(weights='imagenet', input_shape=(224,224,3), include_top=False, pooling='avg')
-nr_of_train_triplets = 50
+nr_of_train_triplets = 59515 # all = 59515
+nr_of_test_triplets  = 59544 # all = 59544
+nr_of_images = 10000
 feat_size = 512 # depends on used model (VGG16: 512)
+#%%
+pos_train_features = np.zeros((nr_of_train_triplets, feat_size*3))
+neg_train_features = np.zeros((nr_of_train_triplets, feat_size*3))
+trp_test_features  = np.zeros((nr_of_test_triplets,  feat_size*3))
+img_features       = np.zeros((nr_of_images,         feat_size))
 
-pos_features = np.zeros((nr_of_train_triplets, feat_size*3))
-trp_features = []
 
-i = 1
-for trp_nr in range(0,len(train_triplets[0:nr_of_train_triplets,:])):
-    for pos in range(0,3):
-        img_nr = train_triplets[trp_nr,pos]
-        print("Progress: ",str(i),"/",str(nr_of_train_triplets*3))
-        i = i + 1;
-        
-        img_path = ''.join(['food/food/', str(img_nr).zfill(5),'.jpg'])
-        img = image.load_img(img_path, target_size=(224,224))
-        x = image.img_to_array(img)
-        x = np.expand_dims(x, axis=0)
-        x = preprocess_input(x)
-        
-        img_features = model.predict(x)
-        trp_features = np.append(trp_features, img_features)
-        
-        
-    pos_features[trp_nr,:] = trp_features
-    trp_features = []
+#%% Calculate all image features ------------------------------------------------
+sub_tic = time.time()
+print("Calculation Image Features")
+for img_nr in range(0, nr_of_images):
+    print("\rProgress: ",str(img_nr),"/",str(nr_of_images-1), end='\r', flush=True)
 
-# After the feature vecotor is generated -> create the inverse one and append
-neg_features = np.copy(pos_features)
-blk1 = neg_features[:,feat_size:2*feat_size]
-blk2 = neg_features[:, 2*feat_size:3*feat_size]
+    img_path = ''.join(['food/food/', str(img_nr).zfill(5),'.jpg'])
+    img = image.load_img(img_path, target_size=(224,224))
+    x = image.img_to_array(img)
+    x = np.expand_dims(x, axis=0)
+    x = preprocess_input(x)
+    
+    img_features[img_nr,:] = model.predict(x)
+print("") # New line after the progress indicator
 
-neg_features[:,feat_size:2*feat_size]    = blk2
-neg_features[:, 2*feat_size:3*feat_size] = blk1
+sub_toc = time.time()
+print("Duration: ", sub_toc-sub_tic, "seconds")
+print("")
 
-# Feature Vector
-all_features = np.append(pos_features, neg_features ,axis=0)
 
-# Feature Label
-all_features_labels = np.ones((nr_of_train_triplets))
-all_features_labels = np.append(all_features_labels, np.zeros((nr_of_train_triplets)))
+#%% Calculate all train triplets features ---------------------------------------
+sub_tic = time.time()
+print("Concatenation Training Triplets")
+for trp_nr in range(0, nr_of_train_triplets):
+    # TODO only print every 5%, otherwise too fast & a printing error occurs
+    print("\rProgress: ",str(trp_nr),"/",str(nr_of_train_triplets-1), end='\r', flush=True)
 
+    a_img_nr = train_triplets[trp_nr, 0]
+    b_img_nr = train_triplets[trp_nr, 1]
+    c_img_nr = train_triplets[trp_nr, 2]
+    
+    a = img_features[a_img_nr, :]
+    b = img_features[b_img_nr, :]
+    c = img_features[c_img_nr, :]
+    
+    pos_train_features[trp_nr,:] = np.concatenate((a,b,c))
+    neg_train_features[trp_nr,:] = np.concatenate((a,c,b))
+
+# Feature Vector & Label
+trp_train_features        = np.append(pos_train_features, neg_train_features ,axis=0)
+trp_train_features_labels = np.append(np.ones((nr_of_train_triplets)), np.zeros((nr_of_train_triplets)))
+print("") # New line after the progress indicator
+
+sub_toc = time.time()
+print("Duration: ", sub_toc-sub_tic, "seconds")
+print("")
+
+
+#%% Calculate all test triplets features ----------------------------------------
+sub_tic = time.time()
+print("Concatenation Testing Triplets")
+for trp_nr in range(0, nr_of_test_triplets):
+    # TODO only print every 5%, otherwise too fast & a printing error occurs
+    print("\rProgress: ",str(trp_nr),"/",str(nr_of_test_triplets-1), end='\r', flush=True)
+
+    a_img_nr = test_triplets[trp_nr, 0]
+    b_img_nr = test_triplets[trp_nr, 1]
+    c_img_nr = test_triplets[trp_nr, 2]
+    
+    a = img_features[a_img_nr, :]
+    b = img_features[b_img_nr, :]
+    c = img_features[c_img_nr, :]
+    
+    trp_test_features[trp_nr,:] = np.concatenate((a,b,c))
+print("") # New line after the progress indicator
+
+sub_toc = time.time()
+print("Duration: ", sub_toc-sub_tic, "seconds")
+print("")
 
 toc = time.time()
 print("Feature Generation done | Duration = ", toc-tic, "seconds")
 
 # %% Train classifier for prediction
 
-print("Start StratifiedKFold")
+print("Start Classification")
 tic = time.time()
-n_splits=3
-kf = StratifiedKFold(n_splits=n_splits)
-X = all_features
-y = all_features_labels
 
-clf = RandomForestClassifier(n_estimators=100, random_state=0)
-scores_avg = np.zeros((1,4))
-clf_keeper = []
+X_train = trp_train_features
+y_train = trp_train_features_labels
+X_test  = trp_test_features
 
-i = 0
-for train_index, test_index in kf.split(X,y):
-    print("Splitting")
-    X_train, X_test = X[train_index], X[test_index]
-    y_train, y_test = y[train_index], y[test_index]
-    
-    clf.fit(X_train, y_train)
-    y_predict = clf.predict(X_test)
-    
-    # --classification report --
-    # print(classification_report(y_test, y_predict, labels=[0,1]))
-    precision, recall, f1, support = precision_recall_fscore_support(y_test, y_predict, labels=[0,1], average='binary')
-    rocs = roc_auc_score(y_test, y_predict)
-    
-    scores = [precision, recall, f1, rocs]
-    
-    scores_avg[i,:] = scores_avg[i,:] + np.asarray(scores)/n_splits
-    
-clf_keeper.append(clf)
-i = i+1
+clf = RandomForestClassifier(n_estimators=150, random_state=0)
 
-scores_df = pd.DataFrame(data=scores_avg,    # values
-                         index=['RandomForest'],    # 1st column as index
-                         columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
-# Select the classifier with the highest f1 score
-clf_best = clf_keeper[np.argmax(scores_df.f1)]
+sub_tic = time.time()
+print("Fitting started")
+clf.fit(X_train, y_train)
+sub_toc = time.time()
+print("Duration: ", sub_toc-sub_tic, "seconds")
+
+sub_tic = time.time()
+print("Predicting started")
+y_predict = clf.predict(X_test)
+sub_toc = time.time()
+print("Duration: ", sub_toc-sub_tic, "seconds")
 
 toc = time.time()
-print("StratifiedKFold done | Duration = ", toc-tic, "seconds")
-
+print("Classification done | Duration = ", toc-tic, "seconds")
 
 # %% Save test labels to csv
-# np.savetxt('submission.csv', test_labels, fmt='%1.0f')
+np.savetxt('submission.csv', y_predict, fmt='%1.0f')
+print("Saved")
