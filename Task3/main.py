@@ -11,19 +11,50 @@ Marco Dober & Vukasin Lalic aka Snorlax
 import numpy as np 
 import pandas as pd
 import time
+from sklearn.utils import shuffle
 # Preprocessing
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.kernel_approximation import Nystroem
+from sklearn.feature_selection import SelectKBest
 # Model Selection
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score
+from sklearn.model_selection import StratifiedKFold
 # Classifiers 
 from sklearn.svm import LinearSVC
 from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import AdaBoostClassifier
 
 
+#%% Resample
+def resample(X_train, y_train):
+    
+    sampling_rate = 15
+    # Step 1: Downsample (Remove some of the majority data points)
+    numbers_to_keep = np.count_nonzero(y_train) * sampling_rate # Arbitrarly choosen
+    X_train_inactive = X_train[y_train==0]
+    X_train_active   = X_train[y_train==1]
+    
+    index_to_keep = np.random.choice(X_train_inactive.shape[0], numbers_to_keep, replace=False) 
+    
+    # Put the resulting array together
+    X_keep = X_train_inactive[index_to_keep]
+    y_keep = np.zeros((X_keep.shape[0],))
+
+    
+    # Step 2: Upsample (Duplicate some minority datapoints with additional small noise)
+    # numbers_to_add
+    X_train_active_rep = np.repeat(X_train_active, 15, axis=0)
+    
+    X_keep = np.append(X_keep, X_train_active_rep, axis=0)
+    y_keep = np.append(y_keep, np.ones((X_train_active_rep.shape[0],)))
+    
+    X_keep, y_keep = shuffle(X_keep, y_keep, random_state=42)
+    
+    return X_keep, y_keep
 
 # %% Read in data sets and convert to numpy arrays 
 
@@ -33,10 +64,11 @@ train_set_df     = pd.read_csv('train.csv')
 
 # Convert to numpy
 test_features  = test_features_df.to_numpy()
+test_features  = test_features.flatten()
 train_set      = train_set_df.to_numpy() 
 train_features = train_set[:,0]
 train_labels   = train_set[:,1]
-train_labels = train_labels.astype(int)
+train_labels   = train_labels.astype(int)
 
 # %% Statistics of train set
 
@@ -87,34 +119,45 @@ test_features_enc = enc.transform(test_features_split).toarray()
 # %% Train Classifier
 
 # Components of pipeline
+
 # Scaler 
 stand_scaler = StandardScaler()
 
-# Transformer (Creates an estimation of kernel transform)
-feature_map_nystrom = Nystroem(kernel = 'rbf',
-                               random_state = 1,
-                               n_components = 100)
+# Feature selection 
+select = SelectKBest()
 
 # Classifier 
-clf_SVC = LinearSVC(class_weight = 'balanced', max_iter = 10000, fit_intercept = False)
-
+clf_RandomForest = RandomForestClassifier(bootstrap = False, random_state=42)
+clf_AdaBoost = AdaBoostClassifier(random_state=42)
+    
 # Create pipeline
-pipe = Pipeline([('transformer', feature_map_nystrom),
-                 ('scaler', stand_scaler),
-                 ('clf', clf_SVC)]) 
+pipe = Pipeline([#('scaler', stand_scaler),
+                 #('selector', select),
+                 ('clf', clf_RandomForest)]) 
 
 # Hyperparameters to evaluate best model 
-param_grid = dict(transformer = ['passthrough', feature_map_nystrom],
-                  scaler      = ['passthrough', stand_scaler], 
-                  clf__C      = [1, 100, 10000])
+param_grid = dict(#scaler            = ['passthrough', stand_scaler],
+                  #selector__k       = ['all', 10, 30, 60],
+                  clf               = [clf_AdaBoost],
+                  #clf__class_weight = [{0:0.05,1:25}, {0:0.03,1:30}],
+                  clf__n_estimators = [300],
+                 #clf__max_features = ['sqrt', None]
+                  )
 
 # Make grid search for best model
-grid_search = GridSearchCV(pipe, param_grid, scoring='f1', cv=3, n_jobs=2)
+grid_search = GridSearchCV(pipe, 
+                           param_grid, 
+                           scoring=['f1', 'precision', 'recall'], 
+                           cv=StratifiedKFold(n_splits=3), 
+                           refit='f1')
+
+
+train_features_enc, train_labels = resample(train_features_enc, train_labels)
 
 # Fit to train data 
 print("grid_search started")
 tic = time.time()
-grid_search.fit(train_features_enc[:,:], train_labels[:])
+grid_search.fit(train_features_enc, train_labels)
 toc = time.time()
 print("grid_search  finisched | Duration = ", toc-tic, "seconds")
 
@@ -125,6 +168,9 @@ print('!!!!!!!!!!!!! Best CV Score !!!!!!!!!!!!!!!!!!!')
 print(grid_search.best_score_)
 print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
+# Save results into panda frame
+cv_result_df = pd.DataFrame(grid_search.cv_results_)
+
 # %% Predict labels of test features with best model
 print("start predict")
 tic = time.time()
@@ -133,5 +179,5 @@ toc = time.time()
 print("predict done | Duration = ", toc-tic, "seconds")
 
 # %% Save test labels to csv
-np.savetxt('submission.csv', test_labels, fmt='%1.0f')
+#np.savetxt('submission.csv', test_labels, fmt='%1.0f')
 
