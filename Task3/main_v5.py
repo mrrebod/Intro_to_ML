@@ -40,6 +40,9 @@ from sklearn.metrics import precision_recall_fscore_support
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+
 
 
 #%% Resample
@@ -185,9 +188,16 @@ y = train_labels
 # Try out different classifiers
 # list_of_classifiers = [GaussianNB(),
 #                        LinearSVC(max_iter=10000),
+#                        SVC(kernel='rbf'),
 #                        DecisionTreeClassifier(random_state=0),
-#                        RandomForestClassifier(n_estimators=50,random_state=0)]
-list_of_classifiers = [RandomForestClassifier(n_estimators=150,random_state=0)]
+#                        RandomForestClassifier(n_estimators=50,random_state=0),
+#                        KNeighborsClassifier(),
+#                        MLPClassifier(alpha=1, max_iter=1000)]
+list_of_classifiers = [SVC(kernel='rbf', C=100),
+                       RandomForestClassifier(n_estimators=300,random_state=0),
+                       MLPClassifier(alpha=0.01)]
+
+# list_of_classifiers = [RandomForestClassifier(n_estimators=150,random_state=0)]
 
 # class_weight={0:0.5,1:20}
 # Allocate Scores 
@@ -195,6 +205,8 @@ scores_avg = np.zeros((len(list_of_classifiers),4))
 clf_keeper = []
 i = 0
 for clf in list_of_classifiers:
+    
+    print('Current Classifier: ', i)
     
     for train_index, test_index in kf.split(X,y):
         X_train, X_test = X[train_index], X[test_index]
@@ -204,7 +216,7 @@ for clf in list_of_classifiers:
         # TODO: Resample the training subset only
         # X_sampled,y_sampled = resample(X_train, y_train)
         # X_sampled,y_sampled = resample(X_train, y_train, upsamp=0)
-        X_sampled,y_sampled = resample(X_train, y_train, upsamp=0, sampling_rate=30, repetition=30, neighbours_active=0)
+        X_sampled,y_sampled = resample(X_train, y_train, sampling_rate=15, repetition=15, neighbours_active=0)
         print(np.round(np.count_nonzero(y_sampled)/len(y_sampled)*100, 2), "% of proteins are active in sampled")
         
         # X_sampled, y_sampled = X_train, y_train
@@ -213,7 +225,7 @@ for clf in list_of_classifiers:
         y_predict = clf.predict(X_test)
         
         # --classification report --
-        # print(classification_report(y_test, y_predict, labels=[0,1]))
+        print(classification_report(y_test, y_predict, labels=[0,1]))
         precision, recall, f1, support = precision_recall_fscore_support(y_test, y_predict, labels=[0,1], average='binary')
         rocs = roc_auc_score(y_test, y_predict)
         
@@ -225,57 +237,18 @@ for clf in list_of_classifiers:
     i = i+1
     
 # Easier to read from the 'Variablenmanager'
-# scores_df = pd.DataFrame(data=scores_avg,    # values
-#                          index=['GaussNB','LinSVC','DecisionTree','RandomForest'],    # 1st column as index
-#                          columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
-
 scores_df = pd.DataFrame(data=scores_avg,    # values
-                         index=['RandomForest'],    # 1st column as index
-                         columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
+                          index=['SVC (rbf)','RandomForest','MLP'],    # 1st column as index
+                          columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
+# scores_df = pd.DataFrame(data=scores_avg,    # values
+#                           index=['GaussNB','LinSVC','SVC (rbf)','DecisionTree','RandomForest','KNN','MLP'],    # 1st column as index
+#                           columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
+
 # Select the classifier with the highest f1 score
 clf_best = clf_keeper[np.argmax(scores_df.f1)]
 
 toc = time.time()
 print("StratifiedKFold done | Duration = ", toc-tic, "seconds")
-
-#%% Resampling to fix the imbalance issue (Only for training dataset)
-
-# Downsample (Remove some of the majority data points) (randomly?)
-# train_features_down = train_features_enc
-# train_labels_down   = 
-
-# Upsample (Duplicate some minority datapoints with additional small noise)
-
-# 1st approach: Downsample
-# 2nd approach: Upsample
-# 3rd approach: Change Metric
-
-
-# Based on this link:
-# https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
-# Use different classifiers
-
-
-
-
-#%% Plot
-# Only works with the Ordinal Encoding
-
-# fig = plt.figure()
-
-# for i in range(0,20):
-#     ax = fig.add_subplot(4, 5, 1+i, projection='3d')
-    
-#     plt.title('First Letter ' + ord_enc.categories_[0][i])
-    
-#     # Get the 3dimensional fetures when the first letter is fixed (reduces from 4d to 3d)
-#     first_letter_feature = train_features_ord_enc[np.where(train_features_ord_enc[:,0] == i)]
-#     first_letter_label   = train_labels[np.where(train_features_ord_enc[:,0] == i)]
-    
-#     ax.scatter3D(first_letter_feature[:,1], first_letter_feature[:,2], first_letter_feature[:,3], c=first_letter_label)
-
-# plt.show()
-
 
 
 # %% Predict labels of test features with best model
@@ -287,5 +260,5 @@ print("predict done | Duration = ", toc-tic, "seconds")
 
 
 # %% Save test labels to csv
-np.savetxt('submission_v2.csv', test_labels, fmt='%1.0f')
+np.savetxt('submission_v5.csv', test_labels, fmt='%1.0f')
 

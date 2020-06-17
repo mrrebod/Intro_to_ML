@@ -13,7 +13,6 @@ import pandas as pd
 import time
 # Preprocessing
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.preprocessing import OrdinalEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.kernel_approximation import Nystroem
 # Model Selection
@@ -21,25 +20,17 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedKFold
-from sklearn.model_selection import KFold
-from sklearn.model_selection import cross_val_score 
 # Classifiers 
 from sklearn.svm import LinearSVC
 from sklearn.svm import SVC
-from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
-from sklearn.neighbors import KNeighborsClassifier
 # Metrics
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import classification_report
 from sklearn.metrics import precision_recall_fscore_support
-# Plot
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
+# Classification
+from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split
 
 
 #%% Resample
@@ -164,128 +155,134 @@ for i in range(0,len(test_features)):
 # One-hot-encode train and test features 
 # initalize type of encoder 
 enc = OneHotEncoder(handle_unknown='ignore',dtype=int)
-ord_enc = OrdinalEncoder()
 # fit and transform to train features
-train_features_ord_enc = ord_enc.fit_transform(train_features_split)
-train_features_enc     = enc.fit_transform(train_features_split).toarray()
+train_features_enc = enc.fit_transform(train_features_split).toarray()
 # transform test features 
-test_features_ord_enc = ord_enc.transform(test_features_split)
-test_features_enc     = enc.transform(test_features_split).toarray()
+test_features_enc = enc.transform(test_features_split).toarray()
 
-    
-#%% Stratified K Fold
-# Split data set into train and validation set
-print("Start StratifiedKFold")
+
+# %%
+
+print("grid_search started")
 tic = time.time()
-n_splits=3
-kf = StratifiedKFold(n_splits=n_splits)
+# n_splits=3
+# kf = StratifiedKFold(n_splits=n_splits)
 X = train_features_enc
 y = train_labels
 
-# Try out different classifiers
-# list_of_classifiers = [GaussianNB(),
-#                        LinearSVC(max_iter=10000),
-#                        DecisionTreeClassifier(random_state=0),
-#                        RandomForestClassifier(n_estimators=50,random_state=0)]
-list_of_classifiers = [RandomForestClassifier(n_estimators=150,random_state=0)]
+# Split the dataset in two equal parts
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=0)
 
-# class_weight={0:0.5,1:20}
-# Allocate Scores 
-scores_avg = np.zeros((len(list_of_classifiers),4))
-clf_keeper = []
-i = 0
-for clf in list_of_classifiers:
-    
-    for train_index, test_index in kf.split(X,y):
-        X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = y[train_index], y[test_index]
-        
-        
-        # TODO: Resample the training subset only
-        # X_sampled,y_sampled = resample(X_train, y_train)
-        # X_sampled,y_sampled = resample(X_train, y_train, upsamp=0)
-        X_sampled,y_sampled = resample(X_train, y_train, upsamp=0, sampling_rate=30, repetition=30, neighbours_active=0)
-        print(np.round(np.count_nonzero(y_sampled)/len(y_sampled)*100, 2), "% of proteins are active in sampled")
-        
-        # X_sampled, y_sampled = X_train, y_train
-        
-        clf.fit(X_sampled,y_sampled)
-        y_predict = clf.predict(X_test)
-        
-        # --classification report --
-        # print(classification_report(y_test, y_predict, labels=[0,1]))
-        precision, recall, f1, support = precision_recall_fscore_support(y_test, y_predict, labels=[0,1], average='binary')
-        rocs = roc_auc_score(y_test, y_predict)
-        
-        scores = [precision, recall, f1, rocs]
-        
-        scores_avg[i,:] = scores_avg[i,:] + np.asarray(scores)/n_splits
-        
-    clf_keeper.append(clf)
-    i = i+1
-    
-# Easier to read from the 'Variablenmanager'
-# scores_df = pd.DataFrame(data=scores_avg,    # values
-#                          index=['GaussNB','LinSVC','DecisionTree','RandomForest'],    # 1st column as index
-#                          columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
+# Set the parameters by cross-validation
+# tuned_parameters = [{'kernel': ['rbf'], 'gamma': [1e-3, 1e-4],
+#                      'C': [1, 10, 100, 1000]},
+#                     {'kernel': ['linear'], 'C': [1, 10, 100, 1000]}]
+tuned_parameters = [{'n_estimators': [50, 100, 150, 200], 
+                     'bootstrap': [True, False]}]
 
-scores_df = pd.DataFrame(data=scores_avg,    # values
-                         index=['RandomForest'],    # 1st column as index
-                         columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
-# Select the classifier with the highest f1 score
-clf_best = clf_keeper[np.argmax(scores_df.f1)]
+# scores = ['precision', 'recall']
+scores = ['f1']
+
+
+for score in scores:
+    print("# Tuning hyper-parameters for %s" % score)
+    print()
+
+    clf = GridSearchCV(
+        RandomForestClassifier(), tuned_parameters, scoring='%s_macro' % score
+    )
+    clf.fit(X_train, y_train)
+
+    print("Best parameters set found on development set:")
+    print()
+    print(clf.best_params_)
+    print()
+    print("Grid scores on development set:")
+    print()
+    means = clf.cv_results_['mean_test_score']
+    stds = clf.cv_results_['std_test_score']
+    for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+        print("%0.3f (+/-%0.03f) for %r"
+              % (mean, std * 2, params))
+    print()
+
+    print("Detailed classification report:")
+    print()
+    print("The model is trained on the full development set.")
+    print("The scores are computed on the full evaluation set.")
+    print()
+    y_true, y_pred = y_test, clf.predict(X_test)
+    print(classification_report(y_true, y_pred))
+    print()
+    
 
 toc = time.time()
-print("StratifiedKFold done | Duration = ", toc-tic, "seconds")
+print("grid_search  finisched | Duration = ", toc-tic, "seconds")
 
-#%% Resampling to fix the imbalance issue (Only for training dataset)
+# # %% Train Classifier
 
-# Downsample (Remove some of the majority data points) (randomly?)
-# train_features_down = train_features_enc
-# train_labels_down   = 
+# # Components of pipeline
 
-# Upsample (Duplicate some minority datapoints with additional small noise)
+# # Classifier 
+# clf_RandomForest = RandomForestClassifier(random_state=42)
 
-# 1st approach: Downsample
-# 2nd approach: Upsample
-# 3rd approach: Change Metric
+# # Create pipeline
+# pipe = Pipeline([('clf', clf_RandomForest)]) 
 
+# # Hyperparameters to evaluate best model 
+# param_grid = dict()
 
-# Based on this link:
-# https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
-# Use different classifiers
+# # Hyperparameters to evaluate best model 
+# # param_grid = dict(#scaler            = ['passthrough', stand_scaler],
+# #                   #selector__k       = ['all', 10, 30, 60],
+# #                   clf               = [clf_AdaBoost],
+# #                   #clf__class_weight = [{0:0.05,1:25}, {0:0.03,1:30}],
+# #                   clf__n_estimators = [300],
+# #                   #clf__max_features = ['sqrt', None]
+# #                   )
 
+# # Make grid search for best model
+# grid_search = GridSearchCV(pipe, param_grid, scoring='f1', cv=StratifiedKFold(n_splits=3))
 
-
-
-#%% Plot
-# Only works with the Ordinal Encoding
-
-# fig = plt.figure()
-
-# for i in range(0,20):
-#     ax = fig.add_subplot(4, 5, 1+i, projection='3d')
-    
-#     plt.title('First Letter ' + ord_enc.categories_[0][i])
-    
-#     # Get the 3dimensional fetures when the first letter is fixed (reduces from 4d to 3d)
-#     first_letter_feature = train_features_ord_enc[np.where(train_features_ord_enc[:,0] == i)]
-#     first_letter_label   = train_labels[np.where(train_features_ord_enc[:,0] == i)]
-    
-#     ax.scatter3D(first_letter_feature[:,1], first_letter_feature[:,2], first_letter_feature[:,3], c=first_letter_label)
-
-# plt.show()
+# # Fit to train data 
+# print("grid_search started")
+# tic = time.time()
+# X_sampled, y_sampled = resample(train_features_enc, train_labels, sampling_rate=30, repetition=30)
+# grid_search.fit(X_sampled, y_sampled)
+# toc = time.time()
+# print("grid_search  finisched | Duration = ", toc-tic, "seconds")
 
 
 
-# %% Predict labels of test features with best model
-print("start predict")
-tic = time.time()
-test_labels = clf_best.predict(test_features_enc)
-toc = time.time()
-print("predict done | Duration = ", toc-tic, "seconds")
+# print('!!!!!!!!!!!!! Best Params !!!!!!!!!!!!!!!!!!!')
+# print(grid_search.best_params_)
+# print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+# print('!!!!!!!!!!!!! Best CV Score !!!!!!!!!!!!!!!!!')
+# print(grid_search.best_score_)
+# print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+# print('!!!!!!!!!!!!! Precision, Recall !!!!!!!!!!!!!')
+# print()
+# print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+# """
+# clf = RandomForestClassifier(random_state=42)
+# X_sampled, y_sampled = resample(train_features_enc, train_labels)
+# clf.fit(X_sampled, y_sampled)
+# test_labels = clf.predict(test_features_enc)
+# """
+
+# # %% Predict labels of test features with best model
+# print("start predict")
+# tic = time.time()
+# test_labels = grid_search.predict(test_features_enc)
+# toc = time.time()
+# print("predict done | Duration = ", toc-tic, "seconds")
 
 
-# %% Save test labels to csv
-np.savetxt('submission_v2.csv', test_labels, fmt='%1.0f')
+# # precision, recall, f1, support = precision_recall_fscore_support(y_test, test_labels, labels=[0,1], average='binary')
+# # rocs = roc_auc_score(y_test, y_predict)
+# # scores = [precision, recall, f1, rocs]
+
+# # %% Save test labels to csv
+# np.savetxt('submission_v4.csv', test_labels, fmt='%1.0f')
 

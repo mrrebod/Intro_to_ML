@@ -40,6 +40,9 @@ from sklearn.metrics import precision_recall_fscore_support
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+
 
 
 #%% Resample
@@ -172,120 +175,65 @@ train_features_enc     = enc.fit_transform(train_features_split).toarray()
 test_features_ord_enc = ord_enc.transform(test_features_split)
 test_features_enc     = enc.transform(test_features_split).toarray()
 
-    
-#%% Stratified K Fold
-# Split data set into train and validation set
-print("Start StratifiedKFold")
+
+
+# %% Train Classifier
+
+# Components of pipeline
+# MLPClassifier(alpha=1, max_iter=1000)
+# Classifier 
+clf_RandomForest = RandomForestClassifier(random_state=42)
+
+# Create pipeline
+pipe = Pipeline([
+    # ('rfrst', RandomForestClassifier(random_state=42)),
+    # ('svc', SVC(kernel='rbf', max_iter=1000))
+    ('mlp', MLPClassifier(max_iter=200))
+    ])
+
+# Hyperparameters to evaluate best model 
+# param_grid = dict()
+param_grid = {#'rfrst__n_estimators': ['passthrough',300],
+                # 'svc__C': [80,90,100,110,120]}
+                'mlp__alpha': [0.0001,0.01,0.1]}
+
+# Make grid search for best model
+grid_search = GridSearchCV(pipe, param_grid, scoring='f1', cv=StratifiedKFold(n_splits=3))
+
+# Fit to train data 
+print("grid_search started")
 tic = time.time()
-n_splits=3
-kf = StratifiedKFold(n_splits=n_splits)
-X = train_features_enc
-y = train_labels
-
-# Try out different classifiers
-# list_of_classifiers = [GaussianNB(),
-#                        LinearSVC(max_iter=10000),
-#                        DecisionTreeClassifier(random_state=0),
-#                        RandomForestClassifier(n_estimators=50,random_state=0)]
-list_of_classifiers = [RandomForestClassifier(n_estimators=150,random_state=0)]
-
-# class_weight={0:0.5,1:20}
-# Allocate Scores 
-scores_avg = np.zeros((len(list_of_classifiers),4))
-clf_keeper = []
-i = 0
-for clf in list_of_classifiers:
-    
-    for train_index, test_index in kf.split(X,y):
-        X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = y[train_index], y[test_index]
-        
-        
-        # TODO: Resample the training subset only
-        # X_sampled,y_sampled = resample(X_train, y_train)
-        # X_sampled,y_sampled = resample(X_train, y_train, upsamp=0)
-        X_sampled,y_sampled = resample(X_train, y_train, upsamp=0, sampling_rate=30, repetition=30, neighbours_active=0)
-        print(np.round(np.count_nonzero(y_sampled)/len(y_sampled)*100, 2), "% of proteins are active in sampled")
-        
-        # X_sampled, y_sampled = X_train, y_train
-        
-        clf.fit(X_sampled,y_sampled)
-        y_predict = clf.predict(X_test)
-        
-        # --classification report --
-        # print(classification_report(y_test, y_predict, labels=[0,1]))
-        precision, recall, f1, support = precision_recall_fscore_support(y_test, y_predict, labels=[0,1], average='binary')
-        rocs = roc_auc_score(y_test, y_predict)
-        
-        scores = [precision, recall, f1, rocs]
-        
-        scores_avg[i,:] = scores_avg[i,:] + np.asarray(scores)/n_splits
-        
-    clf_keeper.append(clf)
-    i = i+1
-    
-# Easier to read from the 'Variablenmanager'
-# scores_df = pd.DataFrame(data=scores_avg,    # values
-#                          index=['GaussNB','LinSVC','DecisionTree','RandomForest'],    # 1st column as index
-#                          columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
-
-scores_df = pd.DataFrame(data=scores_avg,    # values
-                         index=['RandomForest'],    # 1st column as index
-                         columns=['precision','recall','f1','roc_auc'])  # 1st row as the column names
-# Select the classifier with the highest f1 score
-clf_best = clf_keeper[np.argmax(scores_df.f1)]
-
+X_sampled, y_sampled = resample(train_features_enc, train_labels, sampling_rate=15, repetition=5)
+grid_search.fit(X_sampled, y_sampled)
 toc = time.time()
-print("StratifiedKFold done | Duration = ", toc-tic, "seconds")
+print("grid_search  finished | Duration = ", toc-tic, "seconds")
 
-#%% Resampling to fix the imbalance issue (Only for training dataset)
+print('!!!!!!!!!!!!! All Results !!!!!!!!!!!!!!!!!!!')
+print('Rank|Result')
+print(grid_search.cv_results_['rank_test_score'], grid_search.cv_results_['mean_test_score'])
+print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+print('!!!!!!!!!!!!! Best Params !!!!!!!!!!!!!!!!!!!')
+print(grid_search.best_params_)
+print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+print('!!!!!!!!!!!!! Best CV Score !!!!!!!!!!!!!!!!!')
+print(grid_search.best_score_)
+print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
-# Downsample (Remove some of the majority data points) (randomly?)
-# train_features_down = train_features_enc
-# train_labels_down   = 
-
-# Upsample (Duplicate some minority datapoints with additional small noise)
-
-# 1st approach: Downsample
-# 2nd approach: Upsample
-# 3rd approach: Change Metric
-
-
-# Based on this link:
-# https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
-# Use different classifiers
-
-
-
-
-#%% Plot
-# Only works with the Ordinal Encoding
-
-# fig = plt.figure()
-
-# for i in range(0,20):
-#     ax = fig.add_subplot(4, 5, 1+i, projection='3d')
-    
-#     plt.title('First Letter ' + ord_enc.categories_[0][i])
-    
-#     # Get the 3dimensional fetures when the first letter is fixed (reduces from 4d to 3d)
-#     first_letter_feature = train_features_ord_enc[np.where(train_features_ord_enc[:,0] == i)]
-#     first_letter_label   = train_labels[np.where(train_features_ord_enc[:,0] == i)]
-    
-#     ax.scatter3D(first_letter_feature[:,1], first_letter_feature[:,2], first_letter_feature[:,3], c=first_letter_label)
-
-# plt.show()
-
-
+"""
+clf = RandomForestClassifier(random_state=42)
+X_sampled, y_sampled = resample(train_features_enc, train_labels)
+clf.fit(X_sampled, y_sampled)
+test_labels_v1 = clf.predict(test_features_enc)
+"""
 
 # %% Predict labels of test features with best model
 print("start predict")
 tic = time.time()
-test_labels = clf_best.predict(test_features_enc)
+test_labels = grid_search.predict(test_features_enc)
 toc = time.time()
 print("predict done | Duration = ", toc-tic, "seconds")
 
 
 # %% Save test labels to csv
-np.savetxt('submission_v2.csv', test_labels, fmt='%1.0f')
+np.savetxt('submission_v6.csv', test_labels, fmt='%1.0f')
 
