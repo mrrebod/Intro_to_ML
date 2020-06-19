@@ -55,15 +55,15 @@ train_triplets = train_triplets_df.to_numpy()
 print("Start Feature Generation")
 tic = time.time()
 
-model = Xception(weights='imagenet', input_shape=(224,224,3), include_top=False, pooling='avg')
+model = VGG16(weights='imagenet', input_shape=(224,224,3), include_top=False, pooling='avg')
 nr_of_train_triplets = 59515 # all = 59515
 nr_of_test_triplets  = 59544 # all = 59544
 nr_of_images = 10000
-feat_size = 2048 # depends on used model (VGG16: 512) (Xeption: 2048)
+feat_size = 512 # depends on used model (VGG16: 512) (Xeption: 2048)
 #%%
-pos_train_features = np.zeros((nr_of_train_triplets, feat_size*3),dtype='float16')
-neg_train_features = np.zeros((nr_of_train_triplets, feat_size*3),dtype='float16')
-trp_test_features  = np.zeros((nr_of_test_triplets,  feat_size*3),dtype='float16')
+pos_train_features = np.zeros((nr_of_train_triplets, feat_size*3))
+neg_train_features = np.zeros((nr_of_train_triplets, feat_size*3))
+trp_test_features  = np.zeros((nr_of_test_triplets,  feat_size*3))
 img_features       = np.zeros((nr_of_images,         feat_size))
 
 
@@ -73,7 +73,7 @@ print("Calculation Image Features")
 for img_nr in range(0, nr_of_images):
     print("\rProgress: ",str(img_nr),"/",str(nr_of_images-1), end='\r', flush=True)
 
-    img_path = ''.join(['food/food/', str(img_nr).zfill(5),'.jpg'])
+    img_path = ''.join(['food/', str(img_nr).zfill(5),'.jpg'])
     img = image.load_img(img_path, target_size=(224,224))
     x = image.img_to_array(img)
     x = np.expand_dims(x, axis=0)
@@ -99,9 +99,9 @@ for trp_nr in range(0, nr_of_train_triplets):
     b_img_nr = train_triplets[trp_nr, 1]
     c_img_nr = train_triplets[trp_nr, 2]
     
-    a = img_features[a_img_nr, :].astype('float16')
-    b = img_features[b_img_nr, :].astype('float16')
-    c = img_features[c_img_nr, :].astype('float16')
+    a = img_features[a_img_nr, :]
+    b = img_features[b_img_nr, :]
+    c = img_features[c_img_nr, :]
     
     pos_train_features[trp_nr,:] = np.concatenate((a,b,c))
     neg_train_features[trp_nr,:] = np.concatenate((a,c,b))
@@ -128,9 +128,9 @@ for trp_nr in range(0, nr_of_test_triplets):
     b_img_nr = test_triplets[trp_nr, 1]
     c_img_nr = test_triplets[trp_nr, 2]
     
-    a = img_features[a_img_nr, :].astype('float16')
-    b = img_features[b_img_nr, :].astype('float16')
-    c = img_features[c_img_nr, :].astype('float16')
+    a = img_features[a_img_nr, :]
+    b = img_features[b_img_nr, :]
+    c = img_features[c_img_nr, :]
     
     trp_test_features[trp_nr,:] = np.concatenate((a,b,c))
 print("") # New line after the progress indicator
