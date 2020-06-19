@@ -20,9 +20,9 @@ from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.applications.vgg16 import preprocess_input, decode_predictions
 
-# Resize images
-from skimage.transform import resize
-import matplotlib.image as mpimg
+from tensorflow.keras.applications.xception import Xception
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications.xception import preprocess_input, decode_predictions
 
 # Metrics
 from sklearn.metrics import roc_auc_score
@@ -33,6 +33,12 @@ from sklearn.metrics import f1_score
 # Classifiers 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold
+from sklearn.neural_network import MLPClassifier
+from sklearn.svm import LinearSVC
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.naive_bayes import GaussianNB
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
 # %% Read in data sets and convert to numpy arrays 
 
@@ -45,40 +51,19 @@ test_triplets  = test_triplets_df.to_numpy()
 train_triplets = train_triplets_df.to_numpy() 
 
 
-# %% Resize images to a consistent resolution (310,460,3) min=(242,354,3)
-# Create the food/food_res directory by hand
-"""
-print("Start Resizing Images")
-tic = time.time()
-
-img_shape_all = np.zeros((10000,3))
-
-for img_nr in range(0,10000):
-    image_path        = ''.join(['food/food/',     str(img_nr).zfill(5),'.jpg'])
-    image_resize_path = ''.join(['food/food_res/', str(img_nr).zfill(5),'.jpg'])
-
-    img = mpimg.imread(image_path)
-    img_shape_all[img_nr,:] = img.shape
-    
-    mpimg.imsave(image_resize_path, resize(img, (310,460,3),anti_aliasing=True))
-    
-toc = time.time()
-print("Resizing done | Duration = ", toc-tic, "seconds")
-"""
-
 # %% Feature Generation
 print("Start Feature Generation")
 tic = time.time()
 
-model = VGG16(weights='imagenet', input_shape=(224,224,3), include_top=False, pooling='avg')
+model = Xception(weights='imagenet', input_shape=(224,224,3), include_top=False, pooling='avg')
 nr_of_train_triplets = 59515 # all = 59515
 nr_of_test_triplets  = 59544 # all = 59544
 nr_of_images = 10000
-feat_size = 512 # depends on used model (VGG16: 512)
+feat_size = 2048 # depends on used model (VGG16: 512) (Xeption: 2048)
 #%%
-pos_train_features = np.zeros((nr_of_train_triplets, feat_size*3))
-neg_train_features = np.zeros((nr_of_train_triplets, feat_size*3))
-trp_test_features  = np.zeros((nr_of_test_triplets,  feat_size*3))
+pos_train_features = np.zeros((nr_of_train_triplets, feat_size*3),dtype='float16')
+neg_train_features = np.zeros((nr_of_train_triplets, feat_size*3),dtype='float16')
+trp_test_features  = np.zeros((nr_of_test_triplets,  feat_size*3),dtype='float16')
 img_features       = np.zeros((nr_of_images,         feat_size))
 
 
@@ -102,20 +87,21 @@ print("Duration: ", sub_toc-sub_tic, "seconds")
 print("")
 
 
-#%% Calculate all train triplets features ---------------------------------------
+#%% Calculate all train triplets features -------------------------------------
 sub_tic = time.time()
 print("Concatenation Training Triplets")
 for trp_nr in range(0, nr_of_train_triplets):
-    # TODO only print every 5%, otherwise too fast & a printing error occurs
-    print("\rProgress: ",str(trp_nr),"/",str(nr_of_train_triplets-1), end='\r', flush=True)
+    # only print every 5%, otherwise too fast & a printing error occurs
+    if (trp_nr%round(nr_of_train_triplets*0.05) == 0):
+        print("\rProgress: ",str(trp_nr),"/",str(nr_of_train_triplets-1), end='\r', flush=True)
 
     a_img_nr = train_triplets[trp_nr, 0]
     b_img_nr = train_triplets[trp_nr, 1]
     c_img_nr = train_triplets[trp_nr, 2]
     
-    a = img_features[a_img_nr, :]
-    b = img_features[b_img_nr, :]
-    c = img_features[c_img_nr, :]
+    a = img_features[a_img_nr, :].astype('float16')
+    b = img_features[b_img_nr, :].astype('float16')
+    c = img_features[c_img_nr, :].astype('float16')
     
     pos_train_features[trp_nr,:] = np.concatenate((a,b,c))
     neg_train_features[trp_nr,:] = np.concatenate((a,c,b))
@@ -130,20 +116,21 @@ print("Duration: ", sub_toc-sub_tic, "seconds")
 print("")
 
 
-#%% Calculate all test triplets features ----------------------------------------
+#%% Calculate all test triplets features --------------------------------------
 sub_tic = time.time()
 print("Concatenation Testing Triplets")
 for trp_nr in range(0, nr_of_test_triplets):
-    # TODO only print every 5%, otherwise too fast & a printing error occurs
-    print("\rProgress: ",str(trp_nr),"/",str(nr_of_test_triplets-1), end='\r', flush=True)
+    # only print every 5%, otherwise too fast & a printing error occurs
+    if (trp_nr%round(nr_of_test_triplets*0.05) == 0):
+        print("\rProgress: ",str(trp_nr),"/",str(nr_of_test_triplets-1), end='\r', flush=True)
 
     a_img_nr = test_triplets[trp_nr, 0]
     b_img_nr = test_triplets[trp_nr, 1]
     c_img_nr = test_triplets[trp_nr, 2]
     
-    a = img_features[a_img_nr, :]
-    b = img_features[b_img_nr, :]
-    c = img_features[c_img_nr, :]
+    a = img_features[a_img_nr, :].astype('float16')
+    b = img_features[b_img_nr, :].astype('float16')
+    c = img_features[c_img_nr, :].astype('float16')
     
     trp_test_features[trp_nr,:] = np.concatenate((a,b,c))
 print("") # New line after the progress indicator
@@ -164,7 +151,12 @@ X_train = trp_train_features
 y_train = trp_train_features_labels
 X_test  = trp_test_features
 
-clf = RandomForestClassifier(n_estimators=150, random_state=0)
+# clf = RandomForestClassifier(n_estimators=300, random_state=0)
+clf = MLPClassifier(random_state=0,alpha=0.00005, max_iter=700)
+# clf = LinearSVC(random_state=0, C=100)
+# clf = GaussianProcessClassifier(random_state=0)
+# clf = GaussianNB()
+# clf = QuadraticDiscriminantAnalysis()
 
 sub_tic = time.time()
 print("Fitting started")
