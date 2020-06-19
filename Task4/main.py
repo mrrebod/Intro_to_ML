@@ -12,33 +12,18 @@ import pandas as pd
 import time
 
 # Import Keras and pretrained models
-from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input, decode_predictions
 
 from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras.preprocessing import image
-from tensorflow.keras.applications.vgg16 import preprocess_input, decode_predictions
+from tensorflow.keras.applications.vgg16 import preprocess_input
 
-from tensorflow.keras.applications.xception import Xception
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.applications.xception import preprocess_input, decode_predictions
-
-# Metrics
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import classification_report
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.metrics import f1_score
+#from tensorflow.keras.applications.xception import Xception
+#from tensorflow.keras.preprocessing import image
+#from tensorflow.keras.applications.xception import preprocess_input, decode_predictions
 
 # Classifiers 
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import StratifiedKFold
-from sklearn.neural_network import MLPClassifier
-from sklearn.svm import LinearSVC
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
-from sklearn.naive_bayes import GaussianNB
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+#from sklearn.neural_network import MLPClassifier
 
 # %% Read in data sets and convert to numpy arrays 
 
@@ -151,12 +136,8 @@ X_train = trp_train_features
 y_train = trp_train_features_labels
 X_test  = trp_test_features
 
-# clf = RandomForestClassifier(n_estimators=300, random_state=0)
-clf = MLPClassifier(random_state=0,alpha=0.00005, max_iter=700)
-# clf = LinearSVC(random_state=0, C=100)
-# clf = GaussianProcessClassifier(random_state=0)
-# clf = GaussianNB()
-# clf = QuadraticDiscriminantAnalysis()
+clf = RandomForestClassifier(n_estimators=300, random_state=0)
+#clf = MLPClassifier(random_state=0,alpha=0.00005, max_iter=700)
 
 sub_tic = time.time()
 print("Fitting started")
