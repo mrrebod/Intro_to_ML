@@ -2,3 +2,7 @@
 Task4/food.zip
 Task4/food/food/*
 Task4/food/food_res/*
+Task4/img_features.npy
+Task4/trp_test_features.npy
+Task4/trp_train_features.npy
+Task4/trp_train_features_labels.npy
